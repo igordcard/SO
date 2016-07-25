@@ -34,7 +34,7 @@ container nsd-catalog {
         description "Name of the user ";
         type string;
       }
-      leaf gecos {
+      leaf user-info {
         description "The user name's real name";
         type string;
       }
@@ -71,7 +71,7 @@ The ns-instance-config node will be modified to add  the following grouping,
         description "Name of the user ";
         type string;
       }
-      leaf gecos {
+      leaf user-info {
         description "The user name's real name";
         type string;
       }
