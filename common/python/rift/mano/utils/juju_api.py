@@ -256,9 +256,10 @@ class JujuApi(object):
             models = env.models.list()
             for m in models['user-models']:
                 if m['model']['name'] == 'default':
-                    mep =  '{}/model/{}/api'.format(endpoint, m['model']['uuid'])
+                    mep =  '{}/model/{}/api'.format(self.endpoint,
+                                                    m['model']['uuid'])
                     model = Env2(mep, env_uuid=m['model']['uuid'])
-                    l = model.login(args.password, user=args.user)
+                    l = model.login(self.password, user=self.user)
                     break
 
             if model is None:
