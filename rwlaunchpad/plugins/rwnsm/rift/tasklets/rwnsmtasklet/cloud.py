@@ -124,15 +124,6 @@ class NsmPlugins(object):
         return self._plugin_classes[name]
 
 
-class ROAccountConfigSubscriber(mano_dts.AbstractConfigSubscriber):
-
-    def key_name(self):
-        return "name"
-
-    def get_xpath(self):
-        return("C,/rw-launchpad:resource-orchestrator")
-
-
 class CloudAccountConfigSubscriber:
     def __init__(self, log, dts, log_hdl):
         self._dts = dts
@@ -180,7 +171,7 @@ class ROAccountPluginSelector(object):
 
         self._nsm_plugins = NsmPlugins()
 
-        self._ro_sub = ROAccountConfigSubscriber(
+        self._ro_sub = mano_dts.ROAccountConfigSubscriber(
                 self._log,
                 self._dts,
                 self._loop,

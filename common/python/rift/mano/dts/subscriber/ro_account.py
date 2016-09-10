@@ -1,4 +1,4 @@
-
+"""
 # 
 #   Copyright 2016 RIFT.IO Inc
 #
@@ -15,11 +15,22 @@
 #   limitations under the License.
 #
 
-from .core import DtsHandler
+@file ro_account.py
+@author Varun Prasad (varun.prasad@riftio.com)
+@date 09-Jul-2016
 
-# Subscribers
-from .subscriber.core import AbstractOpdataSubscriber, AbstractConfigSubscriber
-from .subscriber.vnf_subscriber import VnfdCatalogSubscriber, VnfrCatalogSubscriber
-from .subscriber.ns_subscriber import NsrCatalogSubscriber, NsdCatalogSubscriber
-from .subscriber.store import SubscriberStore
-from .subscriber.ro_account import ROAccountConfigSubscriber
+"""
+
+import gi
+gi.require_version('RwDts', '1.0')
+from gi.repository import RwDts as rwdts
+
+from . import core
+
+class ROAccountConfigSubscriber(core.AbstractConfigSubscriber):
+
+    def key_name(self):
+        return "name"
+
+    def get_xpath(self):
+        return("C,/rw-launchpad:resource-orchestrator")

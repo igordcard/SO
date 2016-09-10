@@ -41,6 +41,7 @@ rift_python_install_tree(
     rift/mano/dts/subscriber/store.py
     rift/mano/dts/subscriber/ns_subscriber.py
     rift/mano/dts/subscriber/vnf_subscriber.py
+    rift/mano/dts/subscriber/ro_account.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )

@@ -405,7 +405,7 @@ class LaunchpadTasklet(rift.tasklets.Tasklet):
         yield from self.vnfd_catalog_handler.register()
 
         self.log.debug("creating datacenter handler")
-        self.datacenter_handler = datacenters.DataCenterPublisher(self)
+        self.datacenter_handler = datacenters.DataCenterPublisher(self.log, self.dts, self.loop)
         yield from self.datacenter_handler.register()
 
         self.log.debug("creating cloud account handler")
