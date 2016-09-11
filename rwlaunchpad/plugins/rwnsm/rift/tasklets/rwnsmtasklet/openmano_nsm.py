@@ -253,11 +253,14 @@ class OpenmanoNsr(object):
         self._nsd_msg = nsd_msg
         self._nsr_config_msg = nsr_config_msg
 
+        self._vlrs = []
         self._vnfrs = []
         self._vdur_console_handler = {}
 
         self._nsd_uuid = None
         self._nsr_uuid = None
+
+        self._nsr_msg = None
 
         self._created = False
 
@@ -291,17 +294,60 @@ class OpenmanoNsr(object):
         openmano_instance_create["scenario"] = self._nsd_uuid
         if self._nsr_config_msg.has_field("om_datacenter"):
             openmano_instance_create["datacenter"] = self._nsr_config_msg.om_datacenter
+        openmano_instance_create["vnfs"] = {}
+        for vnfr in self._vnfrs:
+            if "om_datacenter" in vnfr.vnfr.vnfr_msg:
+                vnfr_name = vnfr.vnfr.vnfd.name + "__" + str(vnfr.vnfr.vnfr_msg.member_vnf_index_ref)
+                openmano_instance_create["vnfs"][vnfr_name] = {"datacenter": vnfr.vnfr.vnfr_msg.om_datacenter} 
         openmano_instance_create["networks"] = {}
         for vld_msg in self._nsd_msg.vld:
-            if vld_msg.vim_network_name:
-                network = {}
-                network["name"] = vld_msg.name
-                network["netmap-use"] = vld_msg.vim_network_name
-                #network["datacenter"] = vld_msg.om_datacenter
-                openmano_instance_create["networks"][vld_msg.name] = network 
+            openmano_instance_create["networks"][vld_msg.name] = {}
+            openmano_instance_create["networks"][vld_msg.name]["sites"] = list()
+            for vlr in self._vlrs:
+                if vlr.vld_msg.name == vld_msg.name:
+                    self._log.debug("Received VLR name %s, VLR DC: %s for VLD: %s",vlr.vld_msg.name,
+                                     vlr.om_datacenter_name,vld_msg.name)
+                    #network["vim-network-name"] = vld_msg.name
+                    network = {}
+                    ip_profile = {}
+                    if vld_msg.vim_network_name:
+                        network["netmap-use"] = vld_msg.vim_network_name
+                    elif vlr._ip_profile.has_field("ip_profile_params"):
+                        ip_profile_params = vlr._ip_profile.ip_profile_params
+                        if ip_profile_params.ip_version == "ipv6":
+                            ip_profile['ip-version'] = "IPv6"
+                        else:
+                            ip_profile['ip-version'] = "IPv4"
+                        if ip_profile_params.has_field('subnet_address'):
+                            ip_profile['subnet-address'] = ip_profile_params.subnet_address
+                        if ip_profile_params.has_field('gateway_address'):
+                            ip_profile['gateway-address'] = ip_profile_params.gateway_address
+                        if ip_profile_params.has_field('dns_server') and len(ip_profile_params.dns_server) > 0:
+                            ip_profile['dns-address'] =  ip_profile_params.dns_server[0]
+                        if ip_profile_params.has_field('dhcp_params'):
+                            ip_profile['dhcp'] = {}
+                            ip_profile['dhcp']['enabled'] = ip_profile_params.dhcp_params.enabled
+                            ip_profile['dhcp']['start-address'] = ip_profile_params.dhcp_params.start_address
+                            ip_profile['dhcp']['count'] = ip_profile_params.dhcp_params.count
+                    else:
+                        network["netmap-create"] = vlr.name
+                    if vlr.om_datacenter_name:
+                        network["datacenter"] = vlr.om_datacenter_name
+                    elif vld_msg.has_field("om_datacenter"):
+                        network["datacenter"] = vld_msg.om_datacenter
+                    elif "datacenter" in openmano_instance_create:
+                        network["datacenter"] = openmano_instance_create["datacenter"]
+                    if network:
+                        openmano_instance_create["networks"][vld_msg.name]["sites"].append(network) 
+                    if ip_profile:
+                        openmano_instance_create["networks"][vld_msg.name]['ip-profile'] = ip_profile 
              
         return yaml.safe_dump(openmano_instance_create, default_flow_style=False)
 
+    @asyncio.coroutine
+    def add_vlr(self, vlr):
+        self._vlrs.append(vlr)
+        yield from asyncio.sleep(1, loop=self._loop)
 
     @asyncio.coroutine
     def add_vnfr(self, vnfr):
@@ -326,6 +372,7 @@ class OpenmanoNsr(object):
         self._log.debug("Deleting openmano vnfrs")
         for vnfr in self._vnfrs:
             yield from vnfr.delete()
+
 
     @asyncio.coroutine
     def create(self):
@@ -537,7 +584,7 @@ class OpenmanoNsr(object):
                 return
 
     @asyncio.coroutine
-    def deploy(self):
+    def deploy(self,nsr_msg):
         if self._nsd_uuid is None:
             raise ValueError("Cannot deploy an uncreated nsd")
 
@@ -552,17 +599,17 @@ class OpenmanoNsr(object):
             self._log.debug("Found existing instance with nsr name: %s", self._nsr_config_msg.name)
             self._nsr_uuid = name_uuid_map[self._nsr_config_msg.name]
         else:
-            self._nsr_uuid = yield from self._loop.run_in_executor(
-                    None,
-                    self._cli_api.ns_instance_scenario_create,
-                    self.openmano_instance_create_yaml)
-
+            self._nsr_msg = nsr_msg
             fpath = dump_openmano_descriptor(
                "{}_instance_sce_create".format(self._nsr_config_msg.name),
                self.openmano_instance_create_yaml,
                )
-
             self._log.debug("Dumped Openmano NS Scenario Cretae to: %s", fpath)
+
+            self._nsr_uuid = yield from self._loop.run_in_executor(
+                    None,
+                    self._cli_api.ns_instance_scenario_create,
+                    self.openmano_instance_create_yaml)
 
 
         self._monitor_task = asyncio.ensure_future(
@@ -641,9 +688,10 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
 
     @asyncio.coroutine
     def deploy(self, nsr_msg):
+        self._log.debug("Received NSR Deploy msg : %s", nsr_msg)
         openmano_nsr = self._openmano_nsrs[nsr_msg.ns_instance_config_ref]
         yield from openmano_nsr.create()
-        yield from openmano_nsr.deploy()
+        yield from openmano_nsr.deploy(nsr_msg)
 
     @asyncio.coroutine
     def instantiate_ns(self, nsr, xact):
@@ -674,7 +722,9 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         """
         Instantiate NSR with the passed nsr id
         """
-        pass
+        self._log.debug("Received instantiate VL for NSR {}; VLR {}".format(nsr.id,vlr))
+        openmano_nsr = self._openmano_nsrs[nsr.id]
+        yield from openmano_nsr.add_vlr(vlr)
 
     @asyncio.coroutine
     def terminate_ns(self, nsr):

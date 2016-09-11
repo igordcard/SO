@@ -270,7 +270,8 @@ def rift2openmano_nsd(rift_nsd, rift_vnfds):
         topology["connections"][vld.name] = {}
         topology["connections"][vld.name]["nodes"] = []
 
-        if vld.vim_network_name:
+        #if vld.vim_network_name:
+        if True:
             if vld.name not in topology["nodes"]:
                 topology["nodes"][vld.name] = {
                         "type": "external_network",

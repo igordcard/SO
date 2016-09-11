@@ -148,9 +148,7 @@ module nsr
       leaf nsd-ref {
         description "Reference to NSR ID ref";
         mandatory true;
-        type leafref {
-          path "/nsd:nsd-catalog/nsd:nsd/nsd:id";
-        }
+        type string; 
       }
       uses ns-instance-config-params;
     }

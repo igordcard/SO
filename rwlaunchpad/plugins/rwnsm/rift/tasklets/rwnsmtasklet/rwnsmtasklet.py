@@ -460,7 +460,7 @@ class VirtualLinkRecord(object):
     """ Virtual Link Records class"""
     @staticmethod
     @asyncio.coroutine
-    def create_record(dts, log, loop, nsr_name, vld_msg, cloud_account_name, ip_profile, nsr_id, restart_mode=False):
+    def create_record(dts, log, loop, nsr_name, vld_msg, cloud_account_name, om_datacenter, ip_profile, nsr_id, restart_mode=False):
         """Creates a new VLR object based on the given data.
 
         If restart mode is enabled, then we look for existing records in the
@@ -476,6 +476,7 @@ class VirtualLinkRecord(object):
                       nsr_name,
                       vld_msg,
                       cloud_account_name,
+                      om_datacenter,
                       ip_profile,
                       nsr_id,
                       )
@@ -498,13 +499,14 @@ class VirtualLinkRecord(object):
 
         return vlr_obj
 
-    def __init__(self, dts, log, loop, nsr_name, vld_msg, cloud_account_name, ip_profile, nsr_id):
+    def __init__(self, dts, log, loop, nsr_name, vld_msg, cloud_account_name, om_datacenter, ip_profile, nsr_id):
         self._dts = dts
         self._log = log
         self._loop = loop
         self._nsr_name = nsr_name
         self._vld_msg = vld_msg
         self._cloud_account_name = cloud_account_name
+        self._om_datacenter_name = om_datacenter
         self._assigned_subnet = None
         self._nsr_id = nsr_id
         self._ip_profile = ip_profile
@@ -556,6 +558,11 @@ class VirtualLinkRecord(object):
         """ Cloud account that this VLR should be created in """
         return self._cloud_account_name
 
+    @property
+    def om_datacenter_name(self):
+        """ Datacenter  that this VLR should be created in """
+        return self._om_datacenter_name
+
     @staticmethod
     def vlr_xpath(vlr):
         """ Get the VLR path from VLR """
@@ -600,6 +607,7 @@ class VirtualLinkRecord(object):
                     "vld_ref": self.vld_msg.id,
                     "name": self.name,
                     "cloud_account": self.cloud_account_name,
+                    "om_datacenter": self.om_datacenter_name,
                     }
 
         if self._ip_profile and self._ip_profile.has_field('ip_profile_params'):
@@ -618,12 +626,14 @@ class VirtualLinkRecord(object):
         nsr_vlr.vlr_ref = self._vlr_id
         nsr_vlr.assigned_subnet = self.assigned_subnet
         nsr_vlr.cloud_account = self.cloud_account_name
+        nsr_vlr.om_datacenter = self.om_datacenter_name
 
         for conn in self.vld_msg.vnfd_connection_point_ref:
             for vnfr in vnfrs:
                 if (vnfr.vnfd.id == conn.vnfd_id_ref and
                         vnfr.member_vnf_index == conn.member_vnf_index_ref and
-                        self.cloud_account_name == vnfr.cloud_account_name):
+                        self.cloud_account_name == vnfr.cloud_account_name and
+                        self.om_datacenter_name == vnfr.om_datacenter_name):
                     cp_entry = nsr_vlr.vnfr_connection_point_ref.add()
                     cp_entry.vnfr_id = vnfr.id
                     cp_entry.connection_point = conn.vnfd_connection_point_ref
@@ -712,7 +722,7 @@ class VirtualNetworkFunctionRecord(object):
     @staticmethod
     @asyncio.coroutine
     def create_record(dts, log, loop, vnfd, const_vnfd_msg, nsd_id, nsr_name,
-                cloud_account_name, nsr_id, group_name, group_instance_id,
+                cloud_account_name, om_datacenter_name, nsr_id, group_name, group_instance_id,
                 placement_groups, restart_mode=False):
         """Creates a new VNFR object based on the given data.
 
@@ -731,6 +741,7 @@ class VirtualNetworkFunctionRecord(object):
                           nsd_id,
                           nsr_name,
                           cloud_account_name,
+                          om_datacenter_name,
                           nsr_id,
                           group_name,
                           group_instance_id,
@@ -761,6 +772,7 @@ class VirtualNetworkFunctionRecord(object):
                  nsd_id,
                  nsr_name,
                  cloud_account_name,
+                 om_datacenter_name,
                  nsr_id,
                  group_name=None,
                  group_instance_id=None,
@@ -775,6 +787,7 @@ class VirtualNetworkFunctionRecord(object):
         self._nsr_name = nsr_name
         self._nsr_id = nsr_id
         self._cloud_account_name = cloud_account_name
+        self._om_datacenter_name = om_datacenter_name
         self._group_name = group_name
         self._group_instance_id = group_instance_id
         self._placement_groups = placement_groups
@@ -816,7 +829,7 @@ class VirtualNetworkFunctionRecord(object):
     @property
     def const_vnfr_msg(self):
         """ VNFR message """
-        return RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_ConstituentVnfrRef(vnfr_id=self.id,cloud_account=self.cloud_account_name)
+        return RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_ConstituentVnfrRef(vnfr_id=self.id,cloud_account=self.cloud_account_name,om_datacenter=self._om_datacenter_name)
 
     @property
     def vnfd(self):
@@ -827,6 +840,11 @@ class VirtualNetworkFunctionRecord(object):
     def cloud_account_name(self):
         """ Cloud account that this VNF should be created in """
         return self._cloud_account_name
+
+    @property
+    def om_datacenter_name(self):
+        """ Datacenter that this VNF should be created in """
+        return self._om_datacenter_name
 
 
     @property
@@ -933,6 +951,7 @@ class VirtualNetworkFunctionRecord(object):
                 "vnfd_ref": self.vnfd.id,
                 "name": self.name,
                 "cloud_account": self._cloud_account_name,
+                "om_datacenter": self._om_datacenter_name,
                 "config_status": self.config_status
                 }
         vnfr_dict.update(vnfd_copy_dict)
@@ -1284,6 +1303,12 @@ class NetworkServiceRecord(object):
         return self._nsr_cfg_msg.cloud_account
 
     @property
+    def om_datacenter_name(self):
+        if self._nsr_cfg_msg.has_field('om_datacenter'):
+            return self._nsr_cfg_msg.om_datacenter
+        return None
+
+    @property
     def state(self):
         """State of this NetworkServiceRecord"""
         return self._op_status.state
@@ -1380,11 +1405,11 @@ class NetworkServiceRecord(object):
     def _get_vnfd_cloud_account(self, vnfd_member_index):
         """  Fetch Cloud Account for the passed vnfd id """
         if self._nsr_cfg_msg.vnf_cloud_account_map:
-           vim_accounts = [vnf.cloud_account  for vnf in self._nsr_cfg_msg.vnf_cloud_account_map \
+           vim_accounts = [(vnf.cloud_account,vnf.om_datacenter)  for vnf in self._nsr_cfg_msg.vnf_cloud_account_map \
                            if vnfd_member_index == vnf.member_vnf_index_ref]
            if vim_accounts and vim_accounts[0]:
                return vim_accounts[0]
-        return self.cloud_account_name
+        return (self.cloud_account_name,self.om_datacenter_name)
 
     def _get_constituent_vnfd_msg(self, vnf_index):
         for const_vnfd in self.nsd_msg.constituent_vnfd:
@@ -1644,11 +1669,11 @@ class NetworkServiceRecord(object):
                 const_vnfd_msg = self._get_constituent_vnfd_msg(vnf_index)
                 vnfd_msg = self._get_vnfd(const_vnfd_msg.vnfd_id_ref, config_xact)
 
-                cloud_account_name = self._get_vnfd_cloud_account(const_vnfd_msg.member_vnf_index)
+                cloud_account_name, om_datacenter_name = self._get_vnfd_cloud_account(const_vnfd_msg.member_vnf_index)
                 if cloud_account_name is None:
                     cloud_account_name = self.cloud_account_name
                 for _ in range(count):
-                    vnfr = yield from self.create_vnf_record(vnfd_msg, const_vnfd_msg, cloud_account_name, group_name, index)
+                    vnfr = yield from self.create_vnf_record(vnfd_msg, const_vnfd_msg, cloud_account_name, om_datacenter_name, group_name, index)
                     scale_instance.add_vnfr(vnfr)
                     vnfrs.append(vnfr)
 
@@ -1785,7 +1810,7 @@ class NetworkServiceRecord(object):
         return profile[0] if profile else None
 
     @asyncio.coroutine
-    def _create_vls(self, vld, cloud_account):
+    def _create_vls(self, vld, cloud_account,om_datacenter):
         """Create a VLR in the cloud account specified using the given VLD
         
         Args:
@@ -1802,6 +1827,7 @@ class NetworkServiceRecord(object):
                 self.name,
                 vld,
                 cloud_account,
+                om_datacenter,
                 self.resolve_vld_ip_profile(self.nsd_msg, vld),
                 self.id,
                 restart_mode=self.restart_mode)
@@ -1826,25 +1852,28 @@ class NetworkServiceRecord(object):
             # Handle case where cloud_account is None
             vnf_cloud_map = {}
             for vnf in self._nsr_cfg_msg.vnf_cloud_account_map:
-                if vnf.cloud_account is not None:
-                    vnf_cloud_map[vnf.member_vnf_index_ref] = vnf.cloud_account
+                if vnf.cloud_account is not None or vnf.om_datacenter is not None:
+                    vnf_cloud_map[vnf.member_vnf_index_ref] = (vnf.cloud_account,vnf.om_datacenter)
 
             for vnfc in vld.vnfd_connection_point_ref:
                 cloud_account = vnf_cloud_map.get(
                         vnfc.member_vnf_index_ref,
-                        self.cloud_account_name)
+                        (self.cloud_account_name,self.om_datacenter_name))
 
                 cloud_account_list.append(cloud_account)
 
         if self._nsr_cfg_msg.vl_cloud_account_map:
             for vld_map in self._nsr_cfg_msg.vl_cloud_account_map:
                 if vld_map.vld_id_ref == vld.id:
-                    cloud_account_list.extend(vld_map.cloud_accounts)
+                    for cloud_account in vld_map.cloud_accounts:
+                        cloud_account_list.extend((cloud_account,None))
+                    for om_datacenter in vld_map.om_datacenters:
+                        cloud_account_list.extend((None,om_datacenter))
 
         # If no config has been provided then fall-back to the default
         # account
         if not cloud_account_list:
-            cloud_account_list = [self.cloud_account_name]
+            cloud_account_list = [(self.cloud_account_name,self.om_datacenter_name)]
 
         self._log.debug("VL {} cloud accounts: {}".
                         format(vld.name, cloud_account_list))
@@ -1857,8 +1886,8 @@ class NetworkServiceRecord(object):
         for vld in self.nsd_msg.vld:
             self._log.debug("Found vld %s in nsr id %s", vld, self.id)
             cloud_account_list = self._extract_cloud_accounts_for_vl(vld)
-            for account in cloud_account_list:
-                vlr = yield from self._create_vls(vld, account)
+            for cloud_account,om_datacenter in cloud_account_list:
+                vlr = yield from self._create_vls(vld, cloud_account,om_datacenter)
                 self._vlrs.append(vlr)
 
 
@@ -1941,10 +1970,10 @@ class NetworkServiceRecord(object):
                 continue
 
             vnfd_msg = self._get_vnfd(const_vnfd.vnfd_id_ref, config_xact)
-            cloud_account_name = self._get_vnfd_cloud_account(const_vnfd.member_vnf_index)
+            cloud_account_name,om_datacenter_name = self._get_vnfd_cloud_account(const_vnfd.member_vnf_index)
             if cloud_account_name is None:
                 cloud_account_name = self.cloud_account_name
-            yield from self.create_vnf_record(vnfd_msg, const_vnfd, cloud_account_name)
+            yield from self.create_vnf_record(vnfd_msg, const_vnfd, cloud_account_name, om_datacenter_name)
 
 
     def get_placement_groups(self, vnfd_msg, const_vnfd):
@@ -1966,7 +1995,7 @@ class NetworkServiceRecord(object):
         return placement_groups
 
     @asyncio.coroutine
-    def create_vnf_record(self, vnfd_msg, const_vnfd, cloud_account_name, group_name=None, group_instance_id=None):
+    def create_vnf_record(self, vnfd_msg, const_vnfd, cloud_account_name, om_datacenter_name, group_name=None, group_instance_id=None):
         # Fetch the VNFD associated with this VNF
         placement_groups = self.get_placement_groups(vnfd_msg, const_vnfd)
         self._log.info("Cloud Account for VNF %d is %s",const_vnfd.member_vnf_index,cloud_account_name)
@@ -1982,6 +2011,7 @@ class NetworkServiceRecord(object):
                                             self.nsd_id,
                                             self.name,
                                             cloud_account_name,
+                                            om_datacenter_name,
                                             self.id,
                                             group_name,
                                             group_instance_id,

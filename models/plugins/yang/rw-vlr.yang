@@ -56,6 +56,15 @@ module rw-vlr
         path "/rwcloud:cloud/rwcloud:account/rwcloud:name";
       }
     }
+    leaf om-datacenter {
+      description
+          "Openmano datacenter name to use when instantiating
+          the network service.  This is only used when openmano
+          is selected as the cloud account.  This should be superceded
+          by multiple cloud accounts when that becomes available.";
+      type string;
+    }
+
 
     leaf network_pool {
       description "The network pool the resource was allocated from.";
