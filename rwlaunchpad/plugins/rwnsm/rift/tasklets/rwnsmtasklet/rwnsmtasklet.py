@@ -25,6 +25,8 @@ import tempfile
 import time
 import uuid
 import yaml
+import requests
+import json
 
 
 from collections import deque
@@ -2900,8 +2902,10 @@ class NsrRpcDtsHandler(object):
     EXEC_NSR_CONF_O_XPATH = "O,/nsr:start-network-service"
     NETCONF_IP_ADDRESS = "127.0.0.1"
     NETCONF_PORT = 2022
+    RESTCONF_PORT = 8888
     NETCONF_USER = "admin"
     NETCONF_PW = "admin"
+    REST_BASE_V2_URL = 'https://{}:{}/v2/api/'.format("127.0.0.1",8888)
 
     def __init__(self, dts, log, loop, nsm):
         self._dts = dts
@@ -2913,6 +2917,7 @@ class NsrRpcDtsHandler(object):
         self._ns_regh = None
 
         self._manager = None
+        self._nsr_config_url = NsrRpcDtsHandler.REST_BASE_V2_URL + 'config/ns-instance-config'
 
         self._model = RwYang.Model.create_libncx()
         self._model.load_schema_ypbc(RwNsrYang.get_schema())
@@ -2958,6 +2963,12 @@ class NsrRpcDtsHandler(object):
         raise NsrInstantiationFailed("Failed to connect to Launchpad within %s seconds" %
                                       timeout_secs)
 
+    def _apply_ns_instance_config(self,payload_dict):
+        #self._log.debug("At apply NS instance config with payload %s",payload_dict)
+        req_hdr= {'accept':'application/vnd.yang.data+json','content-type':'application/vnd.yang.data+json'}
+        response=requests.post(self._nsr_config_url, headers=req_hdr, auth=('admin', 'admin'),data=payload_dict,verify=False)
+        return response
+
     @asyncio.coroutine
     def register(self):
         """ Register for NS monitoring read from dts """
@@ -2970,7 +2981,7 @@ class NsrRpcDtsHandler(object):
                     "nsr_id":str(uuid.uuid4())
                 })
             
-            if not ('name' in rpc_ip and  'nsd_ref' in rpc_ip and 'cloud_account' in rpc_ip):
+            if not ('name' in rpc_ip and  'nsd_ref' in rpc_ip and ('cloud_account' in rpc_ip or 'om_datacenter' in rpc_ip)):
                 self._log.error("Mandatory parameters name or nsd_ref or cloud account not found in start-network-service {}".format(rpc_ip))
                 
 
@@ -2979,10 +2990,11 @@ class NsrRpcDtsHandler(object):
             try:
                 # Add used value to the pool
                 self._log.debug("RPC output: {}".format(rpc_op))
+  
                 nsd_copy = self.nsm.get_nsd(rpc_ip.nsd_ref)
 
-                if not self._manager:
-                    self._manager = yield from self._connect()
+                #if not self._manager:
+                #    self._manager = yield from self._connect()
         
                 self._log.debug("Configuring ns-instance-config with name  %s nsd-ref: %s",
                         rpc_ip.name, rpc_ip.nsd_ref)
@@ -2996,17 +3008,26 @@ class NsrRpcDtsHandler(object):
                 ns_instance_config.nsd = NsrYang.YangData_Nsr_NsInstanceConfig_Nsr_Nsd()
                 ns_instance_config.nsd.from_dict(nsd_copy.msg.as_dict())
 
-                xml = ns_instance_config.to_xml_v2(self._model)
-                netconf_xml = self.wrap_netconf_config_xml(xml)
+                payload_dict = ns_instance_config.to_json(self._model)
+                #xml = ns_instance_config.to_xml_v2(self._model)
+                #netconf_xml = self.wrap_netconf_config_xml(xml)
 
-                self._log.debug("Sending configure ns-instance-config xml to %s: %s",
-                        netconf_xml, NsrRpcDtsHandler.NETCONF_IP_ADDRESS)
+                #self._log.debug("Sending configure ns-instance-config xml to %s: %s",
+                #        netconf_xml, NsrRpcDtsHandler.NETCONF_IP_ADDRESS)
+                self._log.debug("Sending configure ns-instance-config json to %s: %s",
+                        self._nsr_config_url,ns_instance_config)
 
-                response = yield from self._manager.edit_config(
-                           target="running",
-                           config=netconf_xml,
-                           )
-                self._log.debug("Received edit config response: %s", str(response))
+                #response = yield from self._manager.edit_config(
+                #           target="running",
+                #           config=netconf_xml,
+                #           )
+                response = yield from self._loop.run_in_executor(
+                    None,
+                    self._apply_ns_instance_config,
+                    payload_dict
+                    )
+                response.raise_for_status()
+                self._log.debug("Received edit config response: %s", response.json())
 
                 xact_info.respond_xpath(rwdts.XactRspCode.ACK,
                                         NsrRpcDtsHandler.EXEC_NSR_CONF_O_XPATH,

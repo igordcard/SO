@@ -312,7 +312,7 @@ class OpenmanoNsr(object):
                     ip_profile = {}
                     if vld_msg.vim_network_name:
                         network["netmap-use"] = vld_msg.vim_network_name
-                    elif vlr._ip_profile.has_field("ip_profile_params"):
+                    elif vlr._ip_profile and vlr._ip_profile.has_field("ip_profile_params"):
                         ip_profile_params = vlr._ip_profile.ip_profile_params
                         if ip_profile_params.ip_version == "ipv6":
                             ip_profile['ip-version'] = "IPv6"
