@@ -867,11 +867,17 @@ module rwcal
           "Specifies the type of connection point
              VIRTIO          : Use the traditional VIRTIO interface.
              PCI-PASSTHROUGH : Use PCI-PASSTHROUGH interface.
-             SR-IOV          : Use SR-IOV interface.";
+             SR-IOV          : Use SR-IOV interface.
+             E1000           : Emulate E1000 interface.
+             RTL8139         : Emulate RTL8139 interface.
+             PCNET           : Emulate PCNET interface.";
       type enumeration {
         enum VIRTIO;
         enum PCI-PASSTHROUGH;
         enum SR-IOV;
+        enum E1000;
+        enum RTL8139;
+        enum PCNET;
       }
       default "VIRTIO";
     }
