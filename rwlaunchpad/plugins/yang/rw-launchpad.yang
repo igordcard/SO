@@ -104,18 +104,18 @@ module rw-launchpad
     rwpb:msg-new DataCenters;
     config false;
 
-    list cloud-accounts {
+    list ro-accounts {
       description
           "A list of OpenMano cloud accounts that have data centers associated
           with them";
 
-      rwpb:msg-new CloudAccount;
+      rwpb:msg-new ROAccount;
       key "name";
 
       leaf name {
         description "The name of the cloud account";
         type leafref {
-          path "/rw-cloud:cloud/rw-cloud:account/rw-cloud:name";
+          path "/rw-launchpad:resource-orchestrator/rw-launchpad:name";
         }
       }
 

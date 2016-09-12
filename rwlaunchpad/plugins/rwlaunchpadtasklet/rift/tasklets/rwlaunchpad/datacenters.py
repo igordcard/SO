@@ -22,11 +22,12 @@ from gi.repository import (
     RwLaunchpadYang,
 )
 
+import rift.mano.dts as mano_dts
 import rift.openmano.openmano_client as openmano_client
 import rift.tasklets
 
 
-class DataCenterPublisher(object):
+class DataCenterPublisher(mano_dts.DtsHandler):
     """
     This class is reponsible for exposing the data centers associated with an
     openmano cloud account.
@@ -34,44 +35,33 @@ class DataCenterPublisher(object):
 
     XPATH = "D,/rw-launchpad:datacenters"
 
-    def __init__(self, tasklet):
+    def __init__(self, log, dts, loop):
         """Creates an instance of a DataCenterPublisher
 
         Arguments:
             tasklet - the tasklet that this publisher is registered for
 
         """
-        self.tasklet = tasklet
-        self.reg = None
+        super().__init__(log, dts, loop)
 
-    @property
-    def dts(self):
-        """The DTS instance used by this tasklet"""
-        return self.tasklet.dts
+        self._ro_sub = mano_dts.ROAccountConfigSubscriber(
+                        self.log,
+                        self.dts,
+                        self.loop,
+                        callback=self.on_ro_account_change
+                        )
+        self.ro_accounts = {}
 
-    @property
-    def log(self):
-        """The logger used by this tasklet"""
-        return self.tasklet.log
-
-    @property
-    def loop(self):
-        """The event loop used by this tasklet"""
-        return self.tasklet.loop
-
-    @property
-    def accounts(self):
-        """The known openmano cloud accounts"""
-        accounts = list()
-        for acc in self.tasklet.cloud_accounts:
-            if acc.account_type == "openmano":
-                accounts.append(acc.account_msg)
-
-        return accounts
+    def on_ro_account_change(self, ro_account, action):
+        if action in  [ RwDts.QueryAction.CREATE, RwDts.QueryAction.UPDATE ]:
+            self.ro_accounts[ro_account.name] = ro_account
+        elif action == RwDts.QueryAction.DELETE and ro_account.name in self.ro_accounts:
+            del self.ro_accounts[ro_account.name]
 
     @asyncio.coroutine
     def register(self):
         """Registers the publisher with DTS"""
+        yield from self._ro_sub.register()
 
         @asyncio.coroutine
         def on_prepare(xact_info, action, ks_path, msg):
@@ -82,10 +72,13 @@ class DataCenterPublisher(object):
 
                 # Iterate over the known openmano accounts and populate cloud
                 # account instances with the corresponding data center info
-                for account in self.accounts:
+                for _, account in self.ro_accounts.items():
+                    if account.account_type != "openmano":
+                        continue
+
                     try:
-                        cloud_account = RwLaunchpadYang.CloudAccount()
-                        cloud_account.name = account.name
+                        ro_account = RwLaunchpadYang.ROAccount()
+                        ro_account.name = account.name
 
                         # Create a client for this cloud account to query for
                         # the associated data centers
@@ -98,14 +91,14 @@ class DataCenterPublisher(object):
 
                         # Populate the cloud account with the data center info
                         for uuid, name in client.datacenter_list():
-                            cloud_account.datacenters.append(
+                            ro_account.datacenters.append(
                                     RwLaunchpadYang.DataCenter(
                                         uuid=uuid,
                                         name=name,
                                         )
                                     )
 
-                        datacenters.cloud_accounts.append(cloud_account)
+                        datacenters.ro_accounts.append(ro_account)
 
                     except Exception as e:
                         self.log.exception(e)
