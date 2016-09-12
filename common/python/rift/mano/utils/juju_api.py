@@ -259,7 +259,7 @@ class JujuApi(object):
                     mep =  '{}/model/{}/api'.format(self.endpoint,
                                                     m['model']['uuid'])
                     model = Env2(mep, env_uuid=m['model']['uuid'])
-                    l = model.login(self.password, user=self.user)
+                    l = model.login(self.secret, user=self.user)
                     break
 
             if model is None:
