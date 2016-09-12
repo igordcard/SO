@@ -33,7 +33,7 @@ RIFT_SHELL_EXE = $(TOP_ROOT_PATH)/rift-shell -b $(RIFT_BUILD) -i $(RIFT_INSTALL)
 CONFD = XML_ONLY
 
 BUILD_TYPE = Debug
-NOT_DEVELOPER_TYPE = TRUE
+NOT_DEVELOPER_TYPE = FALSE
 COVERAGE_BUILD = FALSE
 RIFT_AGENT_BUILD = $(CONFD)
 PROJECT_TOP_DIR = $(TOP_ROOT_PATH)
@@ -51,6 +51,9 @@ rw: cmake
 
 install:
 	$(RIFT_SHELL_EXE) $(MAKE) -C $(RIFT_BUILD) install
+
+uninstall:
+	-xargs -i sh -c '[ -e {} ] && rm -fv {}' < $(RIFT_BUILD)/install_manifest.txt
 
 unittest:
 	$(RIFT_SHELL_EXE) $(MAKE) -C $(RIFT_BUILD) rw.unittest
