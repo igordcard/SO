@@ -107,7 +107,7 @@ class PackageFilesystemStore(object):
         """
         if package_id not in self._package_dirs:
             msg = "Package %s not found in %s" % (package_id, self._root_dir)
-            raise PackageStoreError(msg)
+            raise PackageNotFoundError(msg)
 
         package_files = self._get_package_files(package_id)
         package_dir = self._get_package_dir(package_id)
