@@ -68,7 +68,6 @@ yumdownloader rw.toolchain-rwbase-${PLATFORM_VERSION} \
 			rw.core.rwvx-rwha-1.0-${PLATFORM_VERSION} \
 			rw.core.rwvx-rwdts-${PLATFORM_VERSION} \
 			rw.automation.core-RWAUTO-${PLATFORM_VERSION} \
-            rw.core.mc-models-1.0-${PLATFORM_VERSION}
 sudo rpm -i --replacefiles --nodeps *rpm
 popd
 rm -rf $temp
