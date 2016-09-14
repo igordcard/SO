@@ -72,6 +72,10 @@ class OnboardPkgRcConnError(OnboardPkgError):
     pass
 
 
+class OnboardPkgDcError(OnboardPkgError):
+    pass
+
+
 class OnboardPkgAcctError(OnboardPkgError):
     pass
 
@@ -116,6 +120,12 @@ class OnboardPackage:
         self._headers = '-H "accept: application/json"' + \
                         ' -H "content-type: application/json"'
         self._conf_url = "curl -k {header} --user \"{user}:{passwd}\" https://{ip}:{port}/api/config". \
+                       format(header=self._headers,
+                              user=self._user,
+                              passwd=self._password,
+                              ip=self._ip,
+                              port=self._rport)
+        self._oper_url = "curl -k {header} --user \"{user}:{passwd}\" https://{ip}:{port}/api/operational". \
                        format(header=self._headers,
                               user=self._user,
                               passwd=self._password,
@@ -180,10 +190,12 @@ class OnboardPackage:
 
     def _exec_cmd(self, cmd):
         self.log.debug("Execute command: {}".format(cmd))
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, shell=True)
         (output, err) = proc.communicate()
         rc = proc.returncode
-        self.log.debug("Command exec status: {}, {}, {}".format(rc, output, err))
+        self.log.debug("Command exec status: {}\nSTDOUT: {}\nSTDERR: {}".
+                       format(rc, output, err))
         if rc != 0:
             raise OnboardPkgCmdError("Command {} failed ({}): {}".
                                             format(cmd, rc, err))
@@ -263,7 +275,31 @@ class OnboardPackage:
             self.log.debug("No NSD ID provided for instantiation")
             return
 
-        # TODO: Add check to see if datacenter is valid
+        # Check to see if datacenter is valid
+        if self._dc:
+            dc_url = "{url}/datacenters". format(url=self._oper_url)
+            output = self._exec_cmd(dc_url)
+            if (output is None) or (len(output) == 0):
+                # Account not found
+                raise OnboardPkgDcError("Datacenter {} provided is not valid".
+                                        format(self._dc))
+            found = False
+            js = json.loads(output)
+            if "ro-accounts" in js["rw-launchpad:datacenters"]:
+                for ro in js["rw-launchpad:datacenters"]["ro-accounts"]:
+                    if "datacenters" in ro:
+                        for dc in ro["datacenters"]:
+                            if dc["uuid"] == self._dc:
+                                self.log.debug("Found datacenter {}".format(dc))
+                                found = True
+                                break
+                    if found:
+                        break
+
+            if found is False:
+                raise OnboardPkgDcError("Datacenter {} provided is not valid".
+                                        format(self._dc))
+
 
         # Check cloud account is valid, if provided
         if self._account:
