@@ -1429,12 +1429,12 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         kwargs['network_id'] = c_point.virtual_link_id
         kwargs['admin_state_up'] = True
 
-        if c_point.type_yang == 'VIRTIO':
+        if c_point.type_yang == 'VIRTIO' or c_point.type_yang == 'E1000':
             kwargs['port_type'] = 'normal'
         elif c_point.type_yang == 'SR_IOV':
             kwargs['port_type'] = 'direct'
         else:
-            raise NotImplementedError("Port Type: %s not supported" %(c_point.port_type))
+            raise NotImplementedError("Port Type: %s not supported" %(c_point.type_yang))
 
         with self._use_driver(account) as drv:
             if c_point.has_field('security_group'):
@@ -1867,6 +1867,36 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
         if not vdu_init.has_field('flavor_id'):
             vdu_init.flavor_id = self._select_resource_flavor(account,vdu_init)
+
+        ### Check VDU Virtual Interface type and make sure VM with property exists
+        if vdu_init.connection_points is not None:
+                ### All virtual interfaces need to be of the same type for Openstack Accounts
+                if not all(cp.type_yang == vdu_init.connection_points[0].type_yang for cp in vdu_init.connection_points):
+                    ### We have a mix of E1000 & VIRTIO virtual interface types in the VDU, abort instantiation.
+                    assert False, "Only one type of Virtual Intefaces supported for Openstack accounts. Found a mix of VIRTIO & E1000."
+
+                with self._use_driver(account) as drv:
+                    img_info = drv.glance_image_get(vdu_init.image_id)
+
+                virt_intf_type = vdu_init.connection_points[0].type_yang
+                if virt_intf_type == 'E1000':
+                    if 'hw_vif_model' in img_info and img_info.hw_vif_model == 'e1000':
+                        self.log.debug("VDU has Virtual Interface E1000, found matching image with property hw_vif_model=e1000")
+                    else:
+                        err_str = ("VDU has Virtual Interface E1000, but image '%s' does not have property hw_vif_model=e1000" % img_info.name)
+                        self.log.error(err_str)
+                        raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                elif virt_intf_type == 'VIRTIO':
+                    if 'hw_vif_model' in img_info:
+                        err_str = ("VDU has Virtual Interface VIRTIO, but image '%s' has hw_vif_model mismatch" % img_info.name)
+                        self.log.error(err_str)
+                        raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                    else:
+                        self.log.debug("VDU has Virtual Interface VIRTIO, found matching image")
+                else:
+                    err_str = ("VDU Virtual Interface '%s' not supported yet" % virt_intf_type)
+                    self.log.error(err_str)
+                    raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
 
         with self._use_driver(account) as drv:
             ### Now Create VM
