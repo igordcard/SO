@@ -19,7 +19,7 @@
 
 cmake_minimum_required(VERSION 2.8)
 
-install(PROGRAMS rwlaunchpad
+install(PROGRAMS onboard_pkg
         DESTINATION usr/bin
         COMPONENT ${INSTALL_COMPONENT}
         )
