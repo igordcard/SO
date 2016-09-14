@@ -470,20 +470,41 @@ def main(argv=sys.argv[1:]):
     # since it doesn't need it and it will fail within containers
     os.environ["NO_KERNEL_MODS"] = "1"
 
+
+    cleanup_dir_name = None
+    if os.environ["INSTALLDIR"] in ["/", "/home/rift", "/home/rift/.install"]:
+        cleanup_dir_name = os.environ["INSTALLDIR"] + "/"
+
+    if args.test_name and not cleanup_dir_name:
+        cleanup_dir_name = "find {rift_install}/var/rift -name '*{pattern}*' -type d".format( \
+            rift_install=os.environ['RIFT_INSTALL'],
+            pattern = args.test_name)
+        try:
+            cleanup_dir_name = subprocess.check_output(cleanup_dir_name, shell=True)
+            cleanup_dir_name = cleanup_dir_name[:-1].decode("utf-8") + "/"
+        except Exception as e:
+            print ("Directory not found exception occurred. Probably running for first time")
+            print ("Zookeper cleanup cmd = {}".format(cleanup_dir_name))
+    else:
+        cleanup_dir_name = os.environ["INSTALLDIR"] + "/"
+
     # Remove the persistent Redis data
-    for f in os.listdir(os.environ["INSTALLDIR"]):
-        if f.endswith(".aof") or f.endswith(".rdb"):
-           os.remove(os.path.join(os.environ["INSTALLDIR"], f))
-    
-    # Remove the persistant DTS recovery files 
-    for f in os.listdir(os.environ["INSTALLDIR"]):
-        if f.endswith(".db"):
-            os.remove(os.path.join(os.environ["INSTALLDIR"], f))
     try:
-        shutil.rmtree(os.path.join(os.environ["INSTALLDIR"], "zk/server-1"))
+        for f in os.listdir(cleanup_dir_name):
+            if f.endswith(".aof") or f.endswith(".rdb"):
+                os.remove(os.path.join(cleanup_dir_name, f))
+
+        # Remove the persistant DTS recovery files
+        for f in os.listdir(cleanup_dir_name):
+            if f.endswith(".db"):
+                os.remove(os.path.join(cleanup_dir_name, f))
+
+        shutil.rmtree(os.path.join(cleanup_dir_name, "zk/server-1"))
         shutil.rmtree(os.path.join(os.environ["INSTALLDIR"], "var/rift/tmp*"))
-    except:
+    except FileNotFoundError as e:
         pass
+    except Exception as e:
+        print ("Error while cleanup: {}".format(str(e)))
 
     ha_mode = args.ha_mode
     mgmt_ip_list = [] if not args.mgmt_ip_list else args.mgmt_ip_list
