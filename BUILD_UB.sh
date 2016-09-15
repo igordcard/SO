@@ -14,11 +14,11 @@
 #   limitations under the License.
 #
 # Author(s): Jeremy Mordkoff
-# Creation Date: 08/29/2016
+# Creation Date: 8 Sep 2016 -- cloned from BUILD.sh and adapated for Ubuntu
 # 
 #
 
-# BUILD.sh
+# BUILD_UB.sh
 #
 # This is a top-level build script for RIFT.io
 #
@@ -29,47 +29,49 @@
 
 # ARGS
 
-PLATFORM_REPOSITORY=${1:-OSM}  # change to OSM when published
-PLATFORM_VERSION=${2:-4.3.1.0.49165-1}
+PLATFORM_REPOSITORY=${1:-OSM}
+PLATFORM_VERSION=${2:-4.3.1.0.49164}
 
 # must be run from the top of a workspace
 cd $(dirname $0)
-
-
-
 
 # inside RIFT.io this is an NFS mount
 # so just to be safe
 test -h /usr/rift && sudo rm -f /usr/rift
 
-# get the container tools from the correct repository
-sudo rm -f /etc/yum.repos.d/private.repo
-sudo curl -o /etc/yum.repos.d/${PLATFORM_REPOSITORY}.repo \
-    http://buildtracker.riftio.com/repo_file/fc20/${PLATFORM_REPOSITORY}/ 
-sudo yum install --assumeyes rw.tools-container-tools rw.tools-scripts
-
+# enable the right repos
+curl http://repos.riftio.com/public/xenial-riftware-public-key | sudo apt-key add -
+sudo curl -o /etc/apt/sources.list.d/${PLATFORM_REPOSITORY}.list http://buildtracker.riftio.com/repo_file/ub16/${PLATFORM_REPOSITORY}/ 
+sudo apt-get update
+        
+# and install the tools
+sudo apt remove -y rw.toolchain-rwbase tcpdump
+sudo apt-get install -y rw.tools-container-tools rw.tools-scripts python 
 
 # enable the OSM repository hosted by RIFT.io
 # this contains the RIFT platform code and tools
 # and install of the packages required to build and run
 # this module
-sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
+sudo -H /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
 
+
+
+# install the RIFT platform code:
 temp=$(mktemp -d /tmp/rw.XXX)
 pushd $temp
 
-# yum does not accept the --nodeps and --replacefiles options so we
-# download first and then install
-yumdownloader rw.toolchain-rwbase-${PLATFORM_VERSION} \
-			rw.toolchain-rwtoolchain-${PLATFORM_VERSION} \
-			rw.core.mgmt-mgmt-${PLATFORM_VERSION} \
-			rw.core.util-util-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwvx-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwha-1.0-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwdts-${PLATFORM_VERSION} \
-			rw.automation.core-RWAUTO-${PLATFORM_VERSION}
+apt-get download rw.toolchain-rwbase=${PLATFORM_VERSION} \
+			rw.toolchain-rwtoolchain=${PLATFORM_VERSION} \
+			rw.core.mgmt-mgmt=${PLATFORM_VERSION} \
+			rw.core.util-util=${PLATFORM_VERSION} \
+			rw.core.rwvx-rwvx=${PLATFORM_VERSION} \
+			rw.core.rwvx-rwdts=${PLATFORM_VERSION} \
+			rw.automation.core-RWAUTO=${PLATFORM_VERSION} \
+            rw.core.rwvx-rwha-1.0=${PLATFORM_VERSION}
 
-sudo rpm -i --replacefiles --nodeps *rpm
+sudo dpkg -i --force-overwrite *deb
+
+
 popd
 rm -rf $temp
 
@@ -90,5 +92,7 @@ done
 make -j16 
 sudo make install
 
+# you can now clone and build the UI using just make && sudo make install 
+# or you can run without the UI, e.g. 
 # note to start the RIFT.io UI please run
-echo 'sudo /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode --no-ui'
+echo 'sudo -H /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode --no-ui'
