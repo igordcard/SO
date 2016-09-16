@@ -25,15 +25,7 @@ module rw-sdn
 
 
   import rw-pb-ext {
-    prefix "rwpb";
-  }
-
-  import rw-cli-ext {
-    prefix "rwcli";
-  }
-
-  import rw-yang-types {
-    prefix "rwt";
+    prefix "rw-pb-ext";
   }
 
   import rwsdn {
@@ -46,7 +38,7 @@ module rw-sdn
   }
 
   list sdn-account {
-    rwpb:msg-new SDNAccountConfig;
+    rw-pb-ext:msg-new SDNAccountConfig;
 
     key "name";
     leaf name {

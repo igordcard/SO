@@ -37,7 +37,7 @@ from gi.repository import (
     RwVnfdYang,
     VnfdYang,
     RwYang,
-    )
+)
 
 
 try:

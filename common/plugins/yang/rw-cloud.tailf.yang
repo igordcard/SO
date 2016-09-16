@@ -28,14 +28,14 @@ module rw-cloud-annotation
   }
 
   import tailf-common {
-    prefix tailf;
+    prefix tailf-common;
   }
 
-  tailf:annotate "/rw-cloud:cloud/rw-cloud:account/rw-cloud:connection-status" {
-    tailf:callpoint rw_callpoint;
+  tailf-common:annotate "/rw-cloud:cloud/rw-cloud:account/rw-cloud:connection-status" {
+    tailf-common:callpoint rw_callpoint;
   }
 
-  tailf:annotate "/rw-cloud:update-cloud-status" {
-    tailf:actionpoint rw_actionpoint;
+  tailf-common:annotate "/rw-cloud:update-cloud-status" {
+    tailf-common:actionpoint rw_actionpoint;
   }
 }

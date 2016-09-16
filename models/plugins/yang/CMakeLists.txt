@@ -51,6 +51,9 @@ rift_add_yang_target(
     rwcloud_yang_gen
     rwconfig_agent_yang_gen
     mano-types_yang_gen
+  DEPENDS
+    rwcloud_yang
+    rwconfig_agent_yang
   )
 
 #rift_gen_yang_tree(mano-pyang-trees

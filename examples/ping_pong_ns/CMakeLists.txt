@@ -39,18 +39,18 @@ set(PACKAGE_OUTPUT
 add_custom_command(
     OUTPUT ${PACKAGE_OUTPUT}
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/generate_packages.sh
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ping_pong_nsd.py
+    DEPENDS mano_yang rwcloud_yang ${CMAKE_CURRENT_SOURCE_DIR}/ping_pong_nsd.py
   )
 
 add_custom_target(ping_pong_pkg_gen ALL
-    DEPENDS mano_yang ${PACKAGE_OUTPUT}
+    DEPENDS mano_yang rwcloud_yang ${PACKAGE_OUTPUT}
   )
 
 install(
     FILES ${PACKAGE_OUTPUT}
     DESTINATION
       usr/rift/mano/examples/ping_pong_ns
-    COMPONENT ${PKG_LONG_NAME}
+      COMPONENT ${PKG_LONG_NAME}
     )
 
 install(

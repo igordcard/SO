@@ -40,6 +40,8 @@ add_custom_command(
     ${CMAKE_CURRENT_BINARY_DIR}/generate_tidgen_packages.sh
 
   DEPENDS
+    mano_yang
+    rwcloud_yang
     ${RIFT_SUBMODULE_SOURCE_ROOT}/models/openmano/test/tidgen_ns_2sriov.yaml
     ${RIFT_SUBMODULE_SOURCE_ROOT}/models/openmano/test/tidgen_ns_4sriov.yaml
     ${RIFT_SUBMODULE_SOURCE_ROOT}/models/openmano/test/tidgen_vnf_2sriov.yaml
@@ -54,6 +56,7 @@ add_custom_command(
 add_custom_target(tidgen ALL
   DEPENDS
     mano_yang
+    rwcloud_yang
     ${CMAKE_CURRENT_BINARY_DIR}/2tidgenMWC_2sriov.tar.gz
     ${CMAKE_CURRENT_BINARY_DIR}/tidgenMWC_2sriov.tar.gz
     ${CMAKE_CURRENT_BINARY_DIR}/2tidgenMWC_4sriov.tar.gz
@@ -75,8 +78,7 @@ install(
     ${CMAKE_CURRENT_BINARY_DIR}/2tidgenMWC_2sriov_no_ctrlnet.tar.gz
     ${CMAKE_CURRENT_BINARY_DIR}/tidgenMWC_2sriov_no_ctrlnet.tar.gz
 
-    
-  DESTINATION
+ DESTINATION
     usr/rift/mano/examples/tidgen_ns
     COMPONENT ${PKG_LONG_NAME}
   )

@@ -25,15 +25,7 @@ module rw-cloud
 
 
   import rw-pb-ext {
-    prefix "rwpb";
-  }
-
-  import rw-cli-ext {
-    prefix "rwcli";
-  }
-
-  import rw-yang-types {
-    prefix "rwt";
+    prefix "rw-pb-ext";
   }
 
   import rwcal {
@@ -50,9 +42,9 @@ module rw-cloud
   }
 
   container cloud {
-    rwpb:msg-new CloudConfig;
+    rw-pb-ext:msg-new CloudConfig;
     list account {
-      rwpb:msg-new CloudAccount;
+      rw-pb-ext:msg-new CloudAccount;
       description "Configure Cloud Accounts";
 
       max-elements 16;

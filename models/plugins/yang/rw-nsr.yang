@@ -40,7 +40,7 @@ module rw-nsr
   }
 
   import rw-config-agent {
-    prefix "rw-ca";
+    prefix "rw-config-agent";
   }
 
   import rw-sdn {
@@ -172,7 +172,7 @@ module rw-nsr
           The configuration for this VNF will be driven using the specified config
           agent account";
         type leafref {
-          path "/rw-ca:config-agent/rw-ca:account/rw-ca:name";
+          path "/rw-config-agent:config-agent/rw-config-agent:account/rw-config-agent:name";
         }
       }
     }
