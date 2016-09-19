@@ -472,8 +472,9 @@ def main(argv=sys.argv[1:]):
 
 
     cleanup_dir_name = None
-    if os.environ["INSTALLDIR"] in ["/", "/home/rift", "/home/rift/.install"]:
-        cleanup_dir_name = os.environ["INSTALLDIR"] + "/"
+    if os.environ["INSTALLDIR"] in ["/", "/home/rift", "/home/rift/.install",
+        "/usr/rift/build/fc20_debug/install/usr/rift", "/usr/rift"]:
+        cleanup_dir_name = os.environ["INSTALLDIR"] + "/var/rift/"
 
     if args.test_name and not cleanup_dir_name:
         cleanup_dir_name = "find {rift_install}/var/rift -name '*{pattern}*' -type d".format( \
@@ -486,7 +487,8 @@ def main(argv=sys.argv[1:]):
             print ("Directory not found exception occurred. Probably running for first time")
             print ("Zookeper cleanup cmd = {}".format(cleanup_dir_name))
     else:
-        cleanup_dir_name = os.environ["INSTALLDIR"] + "/"
+        if not cleanup_dir_name:
+          cleanup_dir_name = os.environ["INSTALLDIR"] + "/"
 
     # Remove the persistent Redis data
     try:
