@@ -102,7 +102,6 @@ class VnfrConsoleOperdataDtsHandler(object):
             if action == rwdts.QueryAction.READ:
                 schema = RwVnfrYang.YangData_RwVnfr_VnfrConsole_Vnfr_Vdur.schema()
                 path_entry = schema.keyspec_to_entry(ks_path)
-                self._log.debug("VDU Opdata path is {}".format(path_entry))
 
                 try:
                     console_url = yield from self._loop.run_in_executor(
@@ -275,13 +274,17 @@ class OpenmanoNsr(object):
         return {v.rift_vnfd_id: v.vnfd for v in self._vnfrs}
 
     @property
+    def vnfr_ids(self):
+        return {v.rift_vnfd_id: v.openmano_vnfd_id for v in self._vnfrs}
+
+    @property
     def vnfrs(self):
         return self._vnfrs
 
     @property
     def openmano_nsd_yaml(self):
         self._log.debug("Converting nsd %s from rift to openmano", self.nsd.id)
-        openmano_nsd = rift2openmano.rift2openmano_nsd(self.nsd, self.vnfds)
+        openmano_nsd = rift2openmano.rift2openmano_nsd(self.nsd, self.vnfds,self.vnfr_ids)
         return yaml.safe_dump(openmano_nsd, default_flow_style=False)
 
 

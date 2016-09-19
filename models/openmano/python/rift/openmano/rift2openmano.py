@@ -235,7 +235,7 @@ def convert_vnfd_name(vnfd_name, member_idx):
     return vnfd_name + "__" + str(member_idx)
 
 
-def rift2openmano_nsd(rift_nsd, rift_vnfds):
+def rift2openmano_nsd(rift_nsd, rift_vnfds,openmano_vnfd_ids):
     for vnfd_id in rift_nsd.vnfd_ids:
         if vnfd_id not in rift_vnfds:
             raise VNFNotFoundError("VNF id %s not provided" % vnfd_id)
@@ -251,7 +251,14 @@ def rift2openmano_nsd(rift_nsd, rift_vnfds):
         vnfd_id = vnfd.vnfd_id_ref
         rift_vnfd = rift_vnfds[vnfd_id]
         member_idx = vnfd.member_vnf_index
-        topology["nodes"][rift_vnfd.name + "__" + str(member_idx)] = {
+        openmano_vnfd_id = openmano_vnfd_ids.get(vnfd_id,None)
+        if openmano_vnfd_id:
+            topology["nodes"][rift_vnfd.name + "__" + str(member_idx)] = {
+                "type": "VNF",
+                "vnf_id": openmano_vnfd_id
+                }
+        else:
+            topology["nodes"][rift_vnfd.name + "__" + str(member_idx)] = {
                 "type": "VNF",
                 "VNF model": rift_vnfd.name
                 }
