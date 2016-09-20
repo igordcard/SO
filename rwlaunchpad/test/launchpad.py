@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -520,10 +520,8 @@ def main(argv=sys.argv[1:]):
               netconf_trace_override=True)
 
     confd_ip = socket.gethostbyname(socket.gethostname())
-    intf = netifaces.ifaddresses('eth0')
-    if intf and netifaces.AF_INET in intf and len(intf[netifaces.AF_INET]):
-       confd_ip = intf[netifaces.AF_INET][0]['addr']
-    rift.vcs.logger.configure_sink(config_file=None, confd_ip=confd_ip)
+    # TODO: This need to be changed when launchpad starts running on multiple VMs
+    rift.vcs.logger.configure_sink(config_file=None, confd_ip="127.0.0.1")
 
     # Start the prepared system
     system.start()
