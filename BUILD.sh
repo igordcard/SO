@@ -30,7 +30,7 @@
 # ARGS
 
 PLATFORM_REPOSITORY=${1:-OSM}  # change to OSM when published
-PLATFORM_VERSION=${2:-4.3.1.0.49165-1}
+PLATFORM_VERSION=${2:-4.3.1.0.49553}
 
 # must be run from the top of a workspace
 cd $(dirname $0)
