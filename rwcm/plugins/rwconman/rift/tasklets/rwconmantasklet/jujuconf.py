@@ -336,7 +336,7 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                                                 format(params, service))
                             else:
                                 output.execution_status = 'failed'
-                                output.execution_error_Details = \
+                                output.execution_error_details = \
                                     'Failed to apply config: {}'.format(params)
                                 self._log.error("jujuCA: Error applying config {} on service {}".
                                                 format(params, service))

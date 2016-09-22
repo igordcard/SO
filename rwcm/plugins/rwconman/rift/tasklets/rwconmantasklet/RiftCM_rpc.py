@@ -180,8 +180,11 @@ class RiftCMRPCHandler(object):
                         vnf_op.vnfr_id_ref = vnfr_id
                         vnf_op.member_vnf_index_ref = vnf_member_idx
 
+                        idx = 0
                         for primitive in vnf.vnf_primitive:
                             op_primitive = vnf_op.vnf_out_primitive.add()
+                            op_primitive.index = idx
+                            idx += 1
                             op_primitive.name = primitive.name
                             op_primitive.execution_id = ''
                             op_primitive.execution_status = 'completed'
