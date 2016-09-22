@@ -40,7 +40,7 @@ class RwNsPlugin(rwnsmplugin.NsmPluginBase):
         self._log = log
         self._loop = loop
 
-    def create_nsr(self, nsr_msg, nsd):
+    def create_nsr(self, nsr_msg, nsd,key_pairs=None):
         """
         Create Network service record
         """

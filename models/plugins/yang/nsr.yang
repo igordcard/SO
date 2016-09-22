@@ -98,9 +98,7 @@ module nsr
 
       leaf key-pair-ref {
         description "A reference to the key pair entry in the global key pair table";
-        type leafref {
-          path "/nsr:key-pair/nsr:name";
-        }
+        type string; 
       }
     }
     list user {
@@ -111,13 +109,24 @@ module nsr
         description "Name of the user ";
         type string;
       }
-      leaf gecos {
+      leaf user-info {
         description "The user name's real name";
         type string;
       }
-      leaf passwd {
-        description "The user password";
-        type string;
+      list key-pair {
+        key "name";
+        description "Used to configure the list of public keys to be injected as part
+            of ns instantiation";
+
+        leaf name {
+          description "Name of this key pair";
+          type string;
+        }
+
+        leaf key {
+          description "Key associated with this key pair";
+          type string;
+        }
       }
     }
   }
@@ -160,6 +169,8 @@ module nsr
       }
     }
   }
+
+
 
   container ns-instance-config {
 

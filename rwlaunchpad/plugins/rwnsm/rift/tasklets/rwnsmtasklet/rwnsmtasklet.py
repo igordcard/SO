@@ -1231,7 +1231,7 @@ class NetworkServiceRecord(object):
     """ Network service record """
     XPATH = "D,/nsr:ns-instance-opdata/nsr:nsr"
 
-    def __init__(self, dts, log, loop, nsm, nsm_plugin, nsr_cfg_msg, sdn_account_name, restart_mode=False):
+    def __init__(self, dts, log, loop, nsm, nsm_plugin, nsr_cfg_msg, sdn_account_name, key_pairs, restart_mode=False):
         self._dts = dts
         self._log = log
         self._loop = loop
@@ -1243,6 +1243,7 @@ class NetworkServiceRecord(object):
         self._nsd = None
         self._nsr_msg = None
         self._nsr_regh = None
+        self._key_pairs = key_pairs
         self._vlrs = []
         self._vnfrs = {}
         self._vnfds = {}
@@ -3053,6 +3054,7 @@ class NsrDtsHandler(object):
     """ The network service DTS handler """
     NSR_XPATH = "C,/nsr:ns-instance-config/nsr:nsr"
     SCALE_INSTANCE_XPATH = "C,/nsr:ns-instance-config/nsr:nsr/nsr:scaling-group/nsr:instance"
+    KEY_PAIR_XPATH = "C,/nsr:key-pair"
 
     def __init__(self, dts, log, loop, nsm):
         self._dts = dts
@@ -3062,6 +3064,7 @@ class NsrDtsHandler(object):
 
         self._nsr_regh = None
         self._scale_regh = None
+        self._key_pair_regh = None
 
     @property
     def nsm(self):
@@ -3195,12 +3198,20 @@ class NsrDtsHandler(object):
 
             return added_cfgs, deleted_cfgs, updated_cfgs
 
+        def get_nsr_key_pairs(dts_member_reg, xact):
+            key_pairs = {}
+            for instance_cfg, keyspec in dts_member_reg.get_xact_elements(xact, include_keyspec=True):
+                self._log.debug("Key pair received is {} KS: {}".format(instance_cfg, keyspec)) 
+                xpath = keyspec.to_xpath(RwNsrYang.get_schema())
+                key_pairs[instance_cfg.name] = instance_cfg
+            return key_pairs 
+
         def on_apply(dts, acg, xact, action, scratch):
             """Apply the  configuration"""
             self._log.debug("Got nsr apply (xact: %s) (action: %s)(scr: %s)",
                             xact, action, scratch)
 
-            def handle_create_nsr(msg, restart_mode=False):
+            def handle_create_nsr(msg, key_pairs=None, restart_mode=False):
                 # Handle create nsr requests """
                 # Do some validations
                 if not msg.has_field("nsd"):
@@ -3210,7 +3221,7 @@ class NsrDtsHandler(object):
 
                 self._log.debug("Creating NetworkServiceRecord %s  from nsr config  %s",
                                msg.id, msg.as_dict())
-                nsr = self.nsm.create_nsr(msg, restart_mode=restart_mode)
+                nsr = self.nsm.create_nsr(msg, key_pairs=key_pairs, restart_mode=restart_mode)
                 return nsr
 
             def handle_delete_nsr(msg):
@@ -3241,8 +3252,11 @@ class NsrDtsHandler(object):
                             xact, action, scratch)
 
             if action == rwdts.AppconfAction.INSTALL and xact.id is None:
+                key_pairs = []
+                for element in self._key_pair_regh.elements:
+                    key_pairs.append(element)
                 for element in self._nsr_regh.elements:
-                    nsr = handle_create_nsr(element, restart_mode=True)
+                    nsr = handle_create_nsr(element, key_pairs, restart_mode=True)
                     self._loop.create_task(begin_instantiation(nsr))
 
 
@@ -3256,7 +3270,8 @@ class NsrDtsHandler(object):
             for msg in added_msgs:
                 if msg.id not in self._nsm.nsrs:
                     self._log.info("Create NSR received in on_apply to instantiate NS:%s", msg.id)
-                    nsr = handle_create_nsr(msg)
+                    key_pairs = get_nsr_key_pairs(self._key_pair_regh, xact)
+                    nsr = handle_create_nsr(msg,key_pairs)
                     self._loop.create_task(begin_instantiation(nsr))
 
             for msg in deleted_msgs:
@@ -3372,6 +3387,11 @@ class NsrDtsHandler(object):
                                       xpath=NsrDtsHandler.SCALE_INSTANCE_XPATH,
                                       flags=rwdts.Flag.SUBSCRIBER | rwdts.Flag.DELTA_READY| rwdts.Flag.CACHE,
                                       )
+
+            self._key_pair_regh = acg.register(
+                                      xpath=NsrDtsHandler.KEY_PAIR_XPATH,
+                                      flags=rwdts.Flag.SUBSCRIBER | rwdts.Flag.DELTA_READY | rwdts.Flag.CACHE,
+                                       )
 
 
 class NsrOpDataDtsHandler(object):
@@ -3792,7 +3812,7 @@ class NsManager(object):
         # Not calling in a separate task as this is called from a separate task
         yield from nsr.delete_vl_instance(vld)
 
-    def create_nsr(self, nsr_msg, restart_mode=False):
+    def create_nsr(self, nsr_msg, key_pairs=None,restart_mode=False):
         """ Create an NSR instance """
         if nsr_msg.id in self._nsrs:
             msg = "NSR id %s already exists" % nsr_msg.id
@@ -3813,10 +3833,11 @@ class NsManager(object):
                                    nsm_plugin,
                                    nsr_msg,
                                    sdn_account_name,
+                                   key_pairs,
                                    restart_mode=restart_mode
                                    )
         self._nsrs[nsr_msg.id] = nsr
-        nsm_plugin.create_nsr(nsr_msg, nsr_msg.nsd)
+        nsm_plugin.create_nsr(nsr_msg, nsr_msg.nsd, key_pairs)
 
         return nsr
 
