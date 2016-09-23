@@ -79,6 +79,16 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         return self._api
 
     @property
+    def agent_data(self):
+        return dict(
+            type=self.agent_type,
+            name=self.name,
+            host=self._ip_address,
+            port=self._port,
+            user=self._user,
+            secret=self._secret
+        )
+
     def vnfr(self, vnfr_id):
         try:
             vnfr = self._juju_vnfs[vnfr_id].vnfr
@@ -87,6 +97,12 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
             return None
 
         return vnfr
+
+    def get_service_name(self, vnfr_id):
+        vnfr = self.vnfr(vnfr_id)
+        if vnfr and 'vnf_juju_name' in vnfr:
+            return vnfr['vnf_juju_name']
+        return None
 
     def juju_log(self, level, name, log_str, *args):
         if name is not None:
@@ -531,11 +547,11 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                     self._log.info("jujuCA:(%s) Action %s with params %s",
                                    vnfr['vnf_juju_name'], action, params)
 
-                    resp = yield from self.api.execute_actions(action, params,
-                                                               service=service)
+                    resp = yield from self.api.execute_action(action, params,
+                                                              service=service)
                     if 'error' in resp:
-                        self._log.error("Applying initial config failed: {}".
-                                        format(resp))
+                        self._log.error("Applying initial config failed for {} with {}: {}".
+                                        format(action, params, resp))
                         return False
 
                     action_ids.append(resp['action']['tag'])
@@ -554,7 +570,7 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         while pending:
             pending = False
             for act in action_ids:
-                resp = yield from self.api.get_action_status(act, service=service)
+                resp = yield from self.api.get_action_status(act)
                 if 'error' in resp:
                     self._log.error("Initial config failed: {}".format(resp))
                     return False
@@ -647,7 +663,10 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         '''
 
         try:
-            return self.api._get_action_status(execution_id)
+            self._log.debug("jujuCA: Get action status for {}".format(execution_id))
+            resp = self.api._get_action_status(execution_id)
+            self._log.debug("jujuCA: Action status: {}".format(resp))
+            return resp
         except Exception as e:
             self._log.error("jujuCA: Error fetching execution status for %s",
                             execution_id)

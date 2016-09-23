@@ -557,6 +557,7 @@ class ConfigAgentJobMonitor(object):
                     primitive.execution_id
                     )
 
+            self.log.debug("Action status: {}".format(resp))
             status = resp['status']
             if status == 'failed':
                 self.log.warning("Execution of action {} failed: {}".

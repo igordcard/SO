@@ -167,6 +167,10 @@ class RiftCMConfigPluginBase(object):
         raise NotImplementedError
 
     @property
+    def agent_data(self):
+        raise NotImplementedError
+
+    @property
     def dts(self):
         return self._dts
 
@@ -182,6 +186,9 @@ class RiftCMConfigPluginBase(object):
     def nsm(self):
         return self._nsm
 
+
+    def vnfr(self, vnfr_id):
+        raise NotImplementedError
 
     @abc.abstractmethod
     @asyncio.coroutine

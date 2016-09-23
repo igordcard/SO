@@ -239,7 +239,7 @@ class OpenmanoVnfr(object):
 
 
 class OpenmanoNsr(object):
-    TIMEOUT_SECS = 120
+    TIMEOUT_SECS = 300
 
     def __init__(self, dts, log, loop, publisher, cli_api, http_api, nsd_msg, nsr_config_msg,key_pairs):
         self._dts = dts

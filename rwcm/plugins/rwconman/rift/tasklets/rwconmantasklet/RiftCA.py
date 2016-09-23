@@ -52,6 +52,28 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
     def agent_type(self):
         return self._type
 
+    @property
+    def agent_data(self):
+        return dict(
+            type=self.agent_type,
+            name=self.name,
+        )
+
+    def vnfr(self, vnfr_id):
+        try:
+            vnfr = self._rift_vnfs[vnfr_id].vnfr
+        except KeyError:
+            self._log.debug("RiftCA: Did not find VNFR %s in Rift plugin", vnfr_id)
+            return None
+
+        return vnfr
+
+    def get_service_name(self, vnfr_id):
+        vnfr = self.vnfr(vnfr_id)
+        if vnfr:
+            return vnfr['name']
+        return None
+
     @asyncio.coroutine
     def notify_create_vlr(self, agent_nsr, agent_vnfr, vld, vlr):
         """
