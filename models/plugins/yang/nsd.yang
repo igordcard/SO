@@ -902,7 +902,55 @@ module nsd
 
       uses ns-initial-config-primitive;
     }
+
+    list key-pair {
+      key "name";
+      description "Used to configure the list of public keys to be injected as part
+          of ns instantiation";
+
+      leaf name {
+        description "Name of this key pair";
+        type string;
+      }
+
+      leaf key {
+        description "Key associated with this key pair";
+        type string;
+      }
+    }
+
+    list user {
+      key "name";
+      description "List of users to be added through cloud-config";
+
+      leaf name {
+        description "Name of the user ";
+        type string;
+      }
+
+      leaf user-info {
+        description "The user name's real name";
+        type string;
+      }
+
+      list key-pair {
+        key "name";
+        description "Used to configure the list of public keys to be injected as part
+            of ns instantiation";
+
+        leaf name {
+          description "Name of this key pair";
+          type string;
+        }
+
+        leaf key {
+          description "Key associated with this key pair";
+          type string;
+        }
+      }
+    }
   }
+
 
   container nsd-catalog {
 
@@ -910,7 +958,6 @@ module nsd
       key "id";
 
       uses nsd-descriptor;
-
     }
   }
 

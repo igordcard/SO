@@ -241,7 +241,7 @@ class OpenmanoVnfr(object):
 class OpenmanoNsr(object):
     TIMEOUT_SECS = 120
 
-    def __init__(self, dts, log, loop, publisher, cli_api, http_api, nsd_msg, nsr_config_msg):
+    def __init__(self, dts, log, loop, publisher, cli_api, http_api, nsd_msg, nsr_config_msg,key_pairs):
         self._dts = dts
         self._log = log
         self._loop = loop
@@ -255,6 +255,7 @@ class OpenmanoNsr(object):
         self._vlrs = []
         self._vnfrs = []
         self._vdur_console_handler = {}
+        self._key_pairs = key_pairs
 
         self._nsd_uuid = None
         self._nsr_uuid = None
@@ -287,6 +288,46 @@ class OpenmanoNsr(object):
         openmano_nsd = rift2openmano.rift2openmano_nsd(self.nsd, self.vnfds,self.vnfr_ids)
         return yaml.safe_dump(openmano_nsd, default_flow_style=False)
 
+    def get_ssh_key_pairs(self):
+        cloud_config = {}
+        key_pairs = list()
+        for authorized_key in self._nsr_config_msg.ssh_authorized_key:
+            self._log.debug("Key pair ref present is %s",authorized_key.key_pair_ref)
+            if authorized_key.key_pair_ref in  self._key_pairs:
+                key_pairs.append(self._key_pairs[authorized_key.key_pair_ref].key)
+
+        for authorized_key in self._nsd_msg.key_pair:
+            self._log.debug("Key pair  NSD  is %s",authorized_key)
+            key_pairs.append(authorized_key.key)
+
+        if key_pairs: 
+            cloud_config["key-pairs"] = key_pairs 
+             
+        users = list()
+        for user_entry in self._nsr_config_msg.user:
+            self._log.debug("User present is  %s",user_entry)
+            user = {}
+            user["name"] = user_entry.name 
+            user["key-pairs"] = list()
+            for ssh_key in user_entry.key_pair:
+                user["key-pairs"].append(ssh_key.key)
+            users.append(user)
+
+        for user_entry in self._nsd_msg.user:
+            self._log.debug("User present in NSD is  %s",user_entry)
+            user = {}
+            user["name"] = user_entry.name 
+            user["key-pairs"] = list()
+            for ssh_key in user_entry.key_pair:
+                user["key-pairs"].append(ssh_key.key)
+            users.append(user)
+
+        if users:
+            cloud_config["users"] = users
+
+        self._log.debug("Cloud config formed is %s",cloud_config)
+        return cloud_config
+             
 
     @property
     def openmano_instance_create_yaml(self):
@@ -295,6 +336,10 @@ class OpenmanoNsr(object):
         openmano_instance_create["name"] = self._nsr_config_msg.name
         openmano_instance_create["description"] = self._nsr_config_msg.description
         openmano_instance_create["scenario"] = self._nsd_uuid
+
+        cloud_config = self.get_ssh_key_pairs()
+        if cloud_config:
+            openmano_instance_create["cloud-config"] = cloud_config
         if self._nsr_config_msg.has_field("om_datacenter"):
             openmano_instance_create["datacenter"] = self._nsr_config_msg.om_datacenter
         openmano_instance_create["vnfs"] = {}
@@ -344,6 +389,7 @@ class OpenmanoNsr(object):
                         openmano_instance_create["networks"][vld_msg.name]["sites"].append(network) 
                     if ip_profile:
                         openmano_instance_create["networks"][vld_msg.name]['ip-profile'] = ip_profile 
+        
              
         return yaml.safe_dump(openmano_instance_create, default_flow_style=False)
 
@@ -673,7 +719,7 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
                 ro_account.openmano.tenant_id,
                 )
 
-    def create_nsr(self, nsr_config_msg, nsd_msg):
+    def create_nsr(self, nsr_config_msg, nsd_msg, key_pairs=None):
         """
         Create Network service record
         """
@@ -685,7 +731,8 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
                 self._cli_api,
                 self._http_api,
                 nsd_msg,
-                nsr_config_msg
+                nsr_config_msg,
+                key_pairs
                 )
         self._openmano_nsrs[nsr_config_msg.id] = openmano_nsr
 
