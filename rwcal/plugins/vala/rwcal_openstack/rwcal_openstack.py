@@ -1,5 +1,5 @@
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -1296,11 +1296,11 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             except Exception as e:
                 self.log.error("Encountered exceptions during network creation. Exception: %s", str(e))
                 raise
-            
+
             kwargs = {'network_id' : network_id,
                       'dhcp_params': {'enable_dhcp': True},
                       'gateway_ip' : None,}
-            
+
             if link_params.ip_profile_params.has_field('ip_version'):
                 kwargs['ip_version'] = 6 if link_params.ip_profile_params.ip_version == 'ipv6' else 4
             else:
@@ -1315,7 +1315,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                                    link_params.ip_profile_params.subnet_prefix_pool,
                                    link_params.name)
                     raise NeutronException.NotFound("SubnetPool with name %s not found"%(link_params.ip_profile_params.subnet_prefix_pool))
-                
+
                 kwargs['subnetpool_id'] = subnet_pool['id']
             elif link_params.has_field('subnet'):
                 kwargs['cidr'] = link_params.subnet
@@ -1329,17 +1329,17 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                     kwargs['dhcp_params']['start_address']  = link_params.ip_profile_params.dhcp_params.start_address
                 if link_params.ip_profile_params.dhcp_params.has_field('count'):
                     kwargs['dhcp_params']['count']  = link_params.ip_profile_params.dhcp_params.count
-    
+
             if link_params.ip_profile_params.has_field('dns_server'):
                 kwargs['dns_server'] = []
                 for server in link_params.ip_profile_params.dns_server:
-                    kwargs['dns_server'].append(server)
+                    kwargs['dns_server'].append(server.address)
 
             if link_params.ip_profile_params.has_field('gateway_address'):
                 kwargs['gateway_ip'] = link_params.ip_profile_params.gateway_address
-                
+
             drv.neutron_subnet_create(**kwargs)
-            
+
         return network_id
 
 
@@ -1504,8 +1504,8 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('pcie_device'):
             self.log.debug("Rejecting available flavor because pcie_device not required but available")
             return False
-                        
-                    
+
+
         if required.has_field('mempage_size'):
             self.log.debug("Matching mempage_size")
             if available.has_field('mempage_size') == False:
@@ -1518,7 +1518,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('mempage_size'):
             self.log.debug("Rejecting available flavor because mempage_size not required but available")
             return False
-        
+
         if required.has_field('cpu_pinning_policy'):
             self.log.debug("Matching cpu_pinning_policy")
             if required.cpu_pinning_policy != 'ANY':
@@ -1532,7 +1532,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_pinning_policy'):
             self.log.debug("Rejecting available flavor because cpu_pinning_policy not required but available")
             return False
-        
+
         if required.has_field('cpu_thread_pinning_policy'):
             self.log.debug("Matching cpu_thread_pinning_policy")
             if available.has_field('cpu_thread_pinning_policy') == False:
@@ -1559,7 +1559,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('trusted_execution'):
             self.log.debug("Rejecting available flavor because trusted_execution not required but available")
             return False
-        
+
         if required.has_field('numa_node_policy'):
             self.log.debug("Matching numa_node_policy")
             if available.has_field('numa_node_policy') == False:
@@ -1578,7 +1578,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                 elif available.numa_node_policy.has_field('node_cnt'):
                     self.log.debug("Rejecting available flavor because numa node count not required but available")
                     return False
-                
+
                 if required.numa_node_policy.has_field('mem_policy'):
                     self.log.debug("Matching numa_node_policy mem_policy")
                     if available.numa_node_policy.has_field('mem_policy') == False:
@@ -1645,7 +1645,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_model'):
             self.log.debug("Rejecting available flavor because cpu_model not required but available")
             return False
-        
+
         if required.has_field('cpu_arch'):
             self.log.debug("Matching CPU architecture")
             if available.has_field('cpu_arch') == False:
@@ -1659,7 +1659,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_arch'):
             self.log.debug("Rejecting available flavor because cpu_arch not required but available")
             return False
-        
+
         if required.has_field('cpu_vendor'):
             self.log.debug("Matching CPU vendor")
             if available.has_field('cpu_vendor') == False:
@@ -1686,7 +1686,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_socket_count'):
             self.log.debug("Rejecting available flavor because cpu_socket_count not required but available")
             return False
-        
+
         if required.has_field('cpu_core_count'):
             self.log.debug("Matching CPU core count")
             if available.has_field('cpu_core_count') == False:
@@ -1699,7 +1699,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_core_count'):
             self.log.debug("Rejecting available flavor because cpu_core_count not required but available")
             return False
-        
+
         if required.has_field('cpu_core_thread_count'):
             self.log.debug("Matching CPU core thread count")
             if available.has_field('cpu_core_thread_count') == False:
@@ -1712,7 +1712,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_core_thread_count'):
             self.log.debug("Rejecting available flavor because cpu_core_thread_count not required but available")
             return False
-    
+
         if required.has_field('cpu_feature'):
             self.log.debug("Matching CPU feature list")
             if available.has_field('cpu_feature') == False:
@@ -1726,13 +1726,13 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         elif available.has_field('cpu_feature'):
             self.log.debug("Rejecting available flavor because cpu_feature not required but available")
             return False
-        self.log.info("Successful match for Host EPA attributes")            
+        self.log.info("Successful match for Host EPA attributes")
         return True
 
 
     def _match_placement_group_inputs(self, required, available):
         self.log.info("Matching Host aggregate attributes")
-        
+
         if not required and not available:
             # Host aggregate not required and not available => success
             self.log.info("Successful match for Host Aggregate attributes")
@@ -1753,7 +1753,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             #  - Host aggregate not required but available
             self.log.debug("Rejecting available flavor because host Aggregate mismatch. Required: %s, Available: %s ", required, available)
             return False
-                    
+
     def match_epa_params(self, resource_info, request_params):
         result = self._match_vm_flavor(getattr(request_params, 'vm_flavor'),
                                        getattr(resource_info, 'vm_flavor'))
@@ -1791,11 +1791,11 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         if result == False:
             self.log.debug("Host Aggregate mismatched")
             return False
-        
+
         return True
 
     def _select_resource_flavor(self, account, vdu_init):
-        """ 
+        """
             Select a existing flavor if it matches the request or create new flavor
         """
         flavor = RwcalYang.FlavorInfoItem()
@@ -1803,7 +1803,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         epa_types = ['vm_flavor', 'guest_epa', 'host_epa', 'host_aggregate', 'hypervisor_epa', 'vswitch_epa']
         epa_dict = {k: v for k, v in vdu_init.as_dict().items() if k in epa_types}
         flavor.from_dict(epa_dict)
- 
+
         rc, response = self.do_get_flavor_list(account)
         if rc != RwTypes.RwStatus.SUCCESS:
             self.log.error("Get-flavor-info-list operation failed for cloud account: %s",

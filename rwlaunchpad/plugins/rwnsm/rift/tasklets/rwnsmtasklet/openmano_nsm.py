@@ -1,5 +1,5 @@
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -129,7 +129,7 @@ class VnfrConsoleOperdataDtsHandler(object):
                     vdur_console = RwVnfrYang.YangData_RwVnfr_VnfrConsole_Vnfr_Vdur()
                     vdur_console.id = self._vdur_id
                     vdur_console.console_url = 'none'
-                      
+
                 xact_info.respond_xpath(rsp_code=rwdts.XactRspCode.ACK,
                                             xpath=self.vnfr_vdu_console_xpath,
                                             msg=vdur_console)
@@ -137,7 +137,7 @@ class VnfrConsoleOperdataDtsHandler(object):
                 #raise VnfRecordError("Not supported operation %s" % action)
                 self._log.error("Not supported operation %s" % action)
                 xact_info.respond_xpath(rsp_code=rwdts.XactRspCode.ACK)
-                return 
+                return
 
         self._log.debug("Registering for VNFR VDU using xpath: %s",
                         self.vnfr_vdu_console_xpath)
@@ -300,14 +300,14 @@ class OpenmanoNsr(object):
             self._log.debug("Key pair  NSD  is %s",authorized_key)
             key_pairs.append(authorized_key.key)
 
-        if key_pairs: 
-            cloud_config["key-pairs"] = key_pairs 
-             
+        if key_pairs:
+            cloud_config["key-pairs"] = key_pairs
+
         users = list()
         for user_entry in self._nsr_config_msg.user:
             self._log.debug("User present is  %s",user_entry)
             user = {}
-            user["name"] = user_entry.name 
+            user["name"] = user_entry.name
             user["key-pairs"] = list()
             for ssh_key in user_entry.key_pair:
                 user["key-pairs"].append(ssh_key.key)
@@ -316,7 +316,7 @@ class OpenmanoNsr(object):
         for user_entry in self._nsd_msg.user:
             self._log.debug("User present in NSD is  %s",user_entry)
             user = {}
-            user["name"] = user_entry.name 
+            user["name"] = user_entry.name
             user["key-pairs"] = list()
             for ssh_key in user_entry.key_pair:
                 user["key-pairs"].append(ssh_key.key)
@@ -327,7 +327,7 @@ class OpenmanoNsr(object):
 
         self._log.debug("Cloud config formed is %s",cloud_config)
         return cloud_config
-             
+
 
     @property
     def openmano_instance_create_yaml(self):
@@ -346,7 +346,7 @@ class OpenmanoNsr(object):
         for vnfr in self._vnfrs:
             if "om_datacenter" in vnfr.vnfr.vnfr_msg:
                 vnfr_name = vnfr.vnfr.vnfd.name + "__" + str(vnfr.vnfr.vnfr_msg.member_vnf_index_ref)
-                openmano_instance_create["vnfs"][vnfr_name] = {"datacenter": vnfr.vnfr.vnfr_msg.om_datacenter} 
+                openmano_instance_create["vnfs"][vnfr_name] = {"datacenter": vnfr.vnfr.vnfr_msg.om_datacenter}
         openmano_instance_create["networks"] = {}
         for vld_msg in self._nsd_msg.vld:
             openmano_instance_create["networks"][vld_msg.name] = {}
@@ -371,7 +371,7 @@ class OpenmanoNsr(object):
                         if ip_profile_params.has_field('gateway_address'):
                             ip_profile['gateway-address'] = ip_profile_params.gateway_address
                         if ip_profile_params.has_field('dns_server') and len(ip_profile_params.dns_server) > 0:
-                            ip_profile['dns-address'] =  ip_profile_params.dns_server[0]
+                            ip_profile['dns-address'] =  ip_profile_params.dns_server[0].address
                         if ip_profile_params.has_field('dhcp_params'):
                             ip_profile['dhcp'] = {}
                             ip_profile['dhcp']['enabled'] = ip_profile_params.dhcp_params.enabled
@@ -386,11 +386,11 @@ class OpenmanoNsr(object):
                     elif "datacenter" in openmano_instance_create:
                         network["datacenter"] = openmano_instance_create["datacenter"]
                     if network:
-                        openmano_instance_create["networks"][vld_msg.name]["sites"].append(network) 
+                        openmano_instance_create["networks"][vld_msg.name]["sites"].append(network)
                     if ip_profile:
-                        openmano_instance_create["networks"][vld_msg.name]['ip-profile'] = ip_profile 
-        
-             
+                        openmano_instance_create["networks"][vld_msg.name]['ip-profile'] = ip_profile
+
+
         return yaml.safe_dump(openmano_instance_create, default_flow_style=False)
 
     @asyncio.coroutine
@@ -596,11 +596,11 @@ class OpenmanoNsr(object):
 
                         for vm in vnf_status["vms"]:
                             if vm["uuid"] not in self._vdur_console_handler:
-                                vdur_console_handler = VnfrConsoleOperdataDtsHandler(self._dts, self._log, self._loop, 
+                                vdur_console_handler = VnfrConsoleOperdataDtsHandler(self._dts, self._log, self._loop,
                                                     self, vnfr_msg.id,vm["uuid"],vm["name"])
                                 yield from vdur_console_handler.register()
                                 self._vdur_console_handler[vm["uuid"]] = vdur_console_handler
-                             
+
                             vdur_msg = vnfr_msg.vdur.add()
                             vdur_msg.vim_id = vm["vim_vm_id"]
                             vdur_msg.id = vm["uuid"]
@@ -670,7 +670,7 @@ class OpenmanoNsr(object):
 
         for _,handler in  self._vdur_console_handler.items():
             handler._regh.deregister()
-    
+
         if self._nsr_uuid is None:
             self._log.warning("Cannot terminate an un-instantiated nsr")
             return

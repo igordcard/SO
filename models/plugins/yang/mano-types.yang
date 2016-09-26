@@ -1936,9 +1936,12 @@ module mano-types
         type string;
       }
 
-      leaf-list dns-server {
-        description "List of DNS Servers associated with IP Profile";
-        type inet:ip-address;
+      list dns-server {
+        key "address";
+        leaf address {
+					description "List of DNS Servers associated with IP Profile";
+					type inet:ip-address;
+        }
       }
 
       container dhcp-params {  
