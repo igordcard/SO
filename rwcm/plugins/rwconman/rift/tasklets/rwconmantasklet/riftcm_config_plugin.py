@@ -271,6 +271,10 @@ class RiftCMConfigPluginBase(object):
         """ Add VNR to be managed by this config agent """
         pass
 
+    def get_service_status(self, vnfr_id):
+        """Get the status of the service"""
+        return None
+
     @asyncio.coroutine
     def invoke(self, method, *args):
         try:

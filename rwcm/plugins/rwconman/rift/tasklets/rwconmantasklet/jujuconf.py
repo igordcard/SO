@@ -15,10 +15,11 @@
 #
 
 import asyncio
+import os
 import re
 import tempfile
+import time
 import yaml
-import os
 
 import rift.mano.utils.juju_api as juju
 from . import riftcm_config_plugin
@@ -300,16 +301,16 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
     def vnf_config_primitive(self, nsr_id, vnfr_id, primitive, output):
         self._log.debug("jujuCA: VNF config primititve {} for nsr {}, vnfr_id {}".
                         format(primitive, nsr_id, vnfr_id))
-        output.execution_status = "failed"
-        output.execution_id = ''
-        output.execution_error_details = ''
-
         try:
             vnfr = self._juju_vnfs[vnfr_id].vnfr
         except KeyError:
             self._log.error("jujuCA: Did not find VNFR %s in juju plugin",
                             vnfr_id)
             return
+
+        output.execution_status = "failed"
+        output.execution_id = ''
+        output.execution_error_details = ''
 
         try:
             service = vnfr['vnf_juju_name']
@@ -340,14 +341,16 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                             params.update({parameter.name: val})
 
                     if config.name == 'config':
+                        output.execution_id = 'config'
                         if len(params):
                             self._log.debug("jujuCA: applying config with params {} for service {}".
                                             format(params, service))
 
-                            rc = yield from self.api.apply_config(params, service=service)
+                            rc = yield from self.api.apply_config(params, service=service, wait=False)
 
                             if rc:
-                                output.execution_status = "completed"
+                                # Mark as pending and check later for the status
+                                output.execution_status = "pending"
                                 self._log.debug("jujuCA: applied config {} on {}".
                                                 format(params, service))
                             else:
@@ -357,8 +360,9 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                                 self._log.error("jujuCA: Error applying config {} on service {}".
                                                 format(params, service))
                         else:
-                            self._log.warn("jujuCA: Did not find valid paramaters for config : {}".
+                            self._log.warn("jujuCA: Did not find valid parameters for config : {}".
                                            format(primitive.parameter))
+                            output.execution_status = "completed"
                     else:
                         self._log.debug("jujuCA: Execute action {} on service {} with params {}".
                                         format(config.name, service, params))
@@ -550,8 +554,8 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                     resp = yield from self.api.execute_action(action, params,
                                                               service=service)
                     if 'error' in resp:
-                        self._log.error("Applying initial config failed for {} with {}: {}".
-                                        format(action, params, resp))
+                        self._log.error("Applying initial config on {} failed for {} with {}: {}".
+                                        format(vnfr['vnf_juju_name'], action, params, resp))
                         return False
 
                     action_ids.append(resp['action']['tag'])
@@ -672,3 +676,18 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                             execution_id)
             self._log.exception(e)
             raise e
+
+    def get_service_status(self, vnfr_id):
+        '''Get the service status, used by job status handle
+           Make sure this is NOT a coroutine
+        '''
+        service = self.get_service_name(vnfr_id)
+        if service is None:
+            self._log.error("jujuCA: VNFR {} not managed by this Juju agent".
+                            format(vnfr_id))
+            return None
+
+        # Delay for 3 seconds before checking as config apply takes a
+        # few seconds to transfer to the service
+        time.sleep(3)
+        return self.api._get_service_status(service=service)

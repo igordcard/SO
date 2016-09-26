@@ -428,7 +428,10 @@ class ConfigAgentJobMonitor(object):
             for primitive in vnfr.primitive:
                 if primitive.execution_status == "failure":
                     errs += '<error>'
-                    errs += primitive.execution_error_details
+                    if primitive.execution_error_details:
+                        errs += primitive.execution_error_details
+                    else:
+                        errs += '{}: Unknown error'.format(primitive.name)
                     errs += "</error>"
 
         return errs
@@ -516,13 +519,21 @@ class ConfigAgentJobMonitor(object):
         job_status = []
 
         for primitive in vnfr.primitive:
+            if primitive.execution_status != 'pending':
+                continue
+
             if primitive.execution_id == "":
-                # TODO: For some config data, the id will be empty, check if
-                # mapping is needed.
+                # Actions which failed to queue can have empty id
                 job_status.append(primitive.execution_status)
                 continue
 
-            task = self.loop.create_task(self.get_primitive_status(primitive))
+            elif primitive.execution_id == "config":
+                # Config job. Check if service is active
+                task = self.loop.create_task(self.get_service_status(vnfr.id, primitive))
+
+            else:
+                task = self.loop.create_task(self.get_primitive_status(primitive))
+
             tasks.append(task)
 
         if tasks:
@@ -540,6 +551,35 @@ class ConfigAgentJobMonitor(object):
         else:
             vnfr.vnf_job_status = "success"
             return "success"
+
+    @asyncio.coroutine
+    def get_service_status(self, vnfr_id, primitive):
+        try:
+            status = yield from self.loop.run_in_executor(
+                self.executor,
+                self.config_plugin.get_service_status,
+                vnfr_id
+            )
+
+            self.log.debug("Service status: {}".format(status))
+            if status in ['error', 'blocked']:
+                self.log.warning("Execution of config {} failed: {}".
+                                 format(primitive.execution_id, status))
+                primitive.execution_error_details = 'Config failed'
+                status = 'failure'
+            elif status in ['active']:
+                status = 'success'
+            elif status is None:
+                status = 'failure'
+            else:
+                status = 'pending'
+
+        except Exception as e:
+            self.log.exception(e)
+            status = "failed"
+
+        primitive.execution_status = status
+        return primitive.execution_status
 
     @asyncio.coroutine
     def get_primitive_status(self, primitive):
@@ -706,6 +746,15 @@ class ConfigAgentJobManager(object):
         self.log.debug("Creating a job monitor for Job id: {}".format(
                 rpc_output.job_id))
 
+        # If the tasks are none, assume juju actions
+        # TBD: This logic need to be revisited
+        ca = self.nsm.config_agent_plugins[0]
+        if tasks is None:
+            for agent in self.nsm.config_agent_plugins:
+                if agent.agent_type == 'juju':
+                    ca = agent
+                    break
+
         # For every Job we will schedule a new monitoring process.
         job_monitor = ConfigAgentJobMonitor(
             self.dts,
@@ -713,7 +762,7 @@ class ConfigAgentJobManager(object):
             self.jobs[nsr_id],
             self.executor,
             self.loop,
-            self.nsm.config_agent_plugins[0]  # Hack
+            ca
             )
         task = self.loop.create_task(job_monitor.publish_action_status())
 

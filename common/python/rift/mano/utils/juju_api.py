@@ -693,9 +693,7 @@ class JujuApi(object):
                     except Exception as e:
                         msg = "{}: Resolve on unit {}: {}". \
                               format(self, unit, e)
-                        self.log.error(msg)
-                        self.log.exception(e)
-                        raise JujuResolveError(msg)
+                        self.log.warn(msg)
 
     @asyncio.coroutine
     def resolve_error(self, service=None, status=None, env=None):

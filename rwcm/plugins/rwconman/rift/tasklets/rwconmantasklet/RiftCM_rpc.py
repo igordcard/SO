@@ -146,7 +146,7 @@ class RiftCMRPCHandler(object):
 
             for vnfr_id in agent_nsr.vnfr_ids:
                 vnfr = agent_vnfrs[vnfr_id]
-                self._log.debug("CA_RPC: VNFR metadata: {}".format(vnfr))
+                self._log.debug("CA-RPC: VNFR metadata: {}".format(vnfr))
 
                 # index->vnfr ref
                 vnfr_index_map[vnfr.member_vnf_index] = vnfr_id
@@ -189,8 +189,12 @@ class RiftCMRPCHandler(object):
                     for primitive in vnfr.vnf_configuration['initial_config_primitive']:
                         if 'parameter' in primitive:
                             for parameter in primitive['parameter']:
-                               value = xlate(parameter['value'], vnfr.tags)
-                               param_data[parameter.name] = value
+                                try:
+                                    value = xlate(parameter['value'], vnfr.tags)
+                                    param_data[parameter['name']] = value
+                                except KeyError as e:
+                                    self._log.warn("Unable to parse the parameter{}:  {}".
+                                                   format(parameter))
 
                 initial_params[vnfr_id] = param_data
 
@@ -207,7 +211,7 @@ class RiftCMRPCHandler(object):
                     return config_plugin.agent_data
             return ret
 
-        unit_names, init_data, vnfr_index_map, vnf_data_map = get_meta(agent_nsr, agent_vnfrs)
+        unit_names, init_data, vnfr_index_map, vnfr_data_map = get_meta(agent_nsr, agent_vnfrs)
 
         # The data consists of 4 sections
         # 1. Account data
@@ -227,7 +231,7 @@ class RiftCMRPCHandler(object):
             tmp_file.write(yaml.dump(data, default_flow_style=True)
                     .encode("UTF-8"))
 
-        self._log.debug("CA_RPC: Creating a temp file {} with input data: {}".
+        self._log.debug("CA-RPC: Creating a temp file {} with input data: {}".
                         format(tmp_file.name, data))
 
         # Get the full path to the script
@@ -238,12 +242,12 @@ class RiftCMRPCHandler(object):
         else:
             script = os.path.join(self._rift_artif_dir, 'launchpad/libs', agent_nsr.id, 'scripts',
                                   rpc_ip.user_defined_script)
-            self.log.debug("CA_RPC: Checking for script in %s", script)
+            self._log.debug("CA-RPC: Checking for script in %s", script)
             if not os.path.exists(script):
                 script = os.path.join(self._rift_install_dir, 'usr/bin', rpc_ip.user_defined_script)
 
         cmd = "{} {}".format(rpc_ip.user_defined_script, tmp_file.name)
-        self._log.debug("CA_RPC: Running the CMD: {}".format(cmd))
+        self._log.debug("CA-RPC: Running the CMD: {}".format(cmd))
 
         coro = asyncio.create_subprocess_shell(cmd, loop=self._loop,
                                                stderr=asyncio.subprocess.PIPE)
