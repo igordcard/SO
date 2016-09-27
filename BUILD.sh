@@ -27,16 +27,24 @@
 #
 # dependencies -- requires sudo rights
 
+# Defensive bash programming flags
+set -o errexit    # Exit on any error
+trap 'echo ERROR: Command failed: \"$BASH_COMMAND\"' ERR
+set -o nounset    # Expanding an unset variable is an error.  Variables must be
+                  # set before they can be used.
+
 ###############################################################################
 # Options and arguments
 
-params="$(getopt -o suhb: -l install-so,install-ui,build-ui:,help --name "$0" -- "$@")"
+# There 
+params="$(getopt -o suhb: -l install-so,install-ui,no-mkcontainer,build-ui:,help --name "$0" -- "$@")"
 if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
 
 eval set -- $params
 
 installSO=false
 installUI=false
+runMkcontainer=true
 UIPathToBuild=
 
 while true; do
@@ -44,6 +52,7 @@ while true; do
 	-s|--install-so) installSO=true; shift;;
 	-u|--install-ui) installUI=true; shift;;
 	-b|--build-ui) shift; UIPathToBuild=$1; shift;;
+	--no-mkcontainer) runMkcontainer=false; shift;;
 	-h|--help)
 	    echo
 	    echo "NAME:"
@@ -61,6 +70,7 @@ while true; do
 	    echo "  -s|--install-so:  install SO from package"
 	    echo "  -u|--install-ui:  install UI from package"
 	    echo "  -b|--build-ui PATH-TO-UI-REPO:  build the UI in the specified repo"
+	    echo "  --no-mkcontainer: do not run mkcontainer, used for debugging script"
 	    echo "  PLATFORM_REPOSITORY (optional): name of the RIFT.ware repository."
 	    echo "  PLATFORM_VERSION (optional): version of the platform packages to be installed."
 	    echo
@@ -80,79 +90,160 @@ if [[ $UIPathToBuild && ! -d $UIPathToBuild ]]; then
     exit 1
 fi
 
-PLATFORM_REPOSITORY=${1:-OSM}  # change to OSM when published
-PLATFORM_VERSION=${2:-4.3.1.0.49553-1}
+# Turn this on after handling options, so the output doesn't get cluttered.
+set -x             # Print commands before executing them
+
+###############################################################################
+# Find the platform
+if python -mplatform | grep -qi fedora; then
+    PLATFORM=fc20
+elif python -mplatform | grep -qi ubuntu; then
+    PLATFORM=ub16
+else
+    echo "Unknown platform"
+    exit 1
+fi
+
+###############################################################################
+# Set up repo and version
+
+if [[ $PLATFORM == ub16 ]]; then
+    PLATFORM_REPOSITORY=${1:-OSM}
+    PLATFORM_VERSION=${2:-4.3.1.0.49556}
+elif [[ $PLATFORM == fc20 ]]; then
+    PLATFORM_REPOSITORY=${1:-OSM}  # change to OSM when published
+    PLATFORM_VERSION=${2:-4.3.1.0.49553-1}
+else
+    echo "Internal error: unknown platform $PLATFORM"
+    exit 1
+fi
 
 ###############################################################################
 # Main block
 
-# Turn these on after handling options, so the output doesn't get cluttered.
-set -o errexit    # Exit on any error
-set -x             # Print commands before executing them
-
 # must be run from the top of a workspace
 cd $(dirname $0)
-
-
-
 
 # inside RIFT.io this is an NFS mount
 # so just to be safe
 test -h /usr/rift && sudo rm -f /usr/rift
 
-# get the container tools from the correct repository
-sudo rm -f /etc/yum.repos.d/private.repo
-sudo curl -o /etc/yum.repos.d/${PLATFORM_REPOSITORY}.repo \
-    http://buildtracker.riftio.com/repo_file/fc20/${PLATFORM_REPOSITORY}/ 
-sudo yum install --assumeyes rw.tools-container-tools rw.tools-scripts
-
+if [[ $PLATFORM == ub16 ]]; then
+    # enable the right repos
+    curl http://repos.riftio.com/public/xenial-riftware-public-key | sudo apt-key add -
+    sudo curl -o /etc/apt/sources.list.d/${PLATFORM_REPOSITORY}.list http://buildtracker.riftio.com/repo_file/ub16/${PLATFORM_REPOSITORY}/ 
+    sudo apt-get update
+        
+    # and install the tools
+    sudo apt remove -y rw.toolchain-rwbase tcpdump
+    sudo apt-get install -y rw.tools-container-tools rw.tools-scripts python 
+elif [[ $PLATFORM == fc20 ]]; then
+    # get the container tools from the correct repository
+    sudo rm -f /etc/yum.repos.d/private.repo
+    sudo curl -o /etc/yum.repos.d/${PLATFORM_REPOSITORY}.repo \
+	 http://buildtracker.riftio.com/repo_file/fc20/${PLATFORM_REPOSITORY}/ 
+    sudo yum install --assumeyes rw.tools-container-tools rw.tools-scripts
+else
+    echo "Internal error: unknown platform $PLATFORM"
+    exit 1
+fi
 
 # enable the OSM repository hosted by RIFT.io
 # this contains the RIFT platform code and tools
 # and install of the packages required to build and run
 # this module
-sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
-
-temp=$(mktemp -d /tmp/rw.XXX)
-pushd $temp
-
-# yum does not accept the --nodeps and --replacefiles options so we
-# download first and then install
-yumdownloader rw.toolchain-rwbase-${PLATFORM_VERSION} \
-			rw.toolchain-rwtoolchain-${PLATFORM_VERSION} \
-			rw.core.mgmt-mgmt-${PLATFORM_VERSION} \
-			rw.core.util-util-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwvx-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwha-1.0-${PLATFORM_VERSION} \
-			rw.core.rwvx-rwdts-${PLATFORM_VERSION} \
-			rw.automation.core-RWAUTO-${PLATFORM_VERSION}
-
-sudo rpm -i --replacefiles --nodeps *rpm
-popd
-rm -rf $temp
-
-# this file gets in the way of the one generated by the build
-sudo rm -f /usr/rift/usr/lib/libmano_yang_gen.so
-
-
-sudo chmod 777 /usr/rift /usr/rift/usr/share
-
-if $installSO; then
-    sudo apt-get install -y \
-	 rw.core.mc-\*-${PLATFORM_VERSION}
+if $runMkcontainer; then
+    sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
 fi
 
-if $installUI; then
-    sudo apt-get install -y \
-	 rw.ui-about-${PLATFORM_VERSION} \
-	 rw.ui-logging-${PLATFORM_VERSION} \
-	 rw.ui-skyquake-${PLATFORM_VERSION} \
-	 rw.ui-accounts-${PLATFORM_VERSION} \
-	 rw.ui-composer-${PLATFORM_VERSION} \
-	 rw.ui-launchpad-${PLATFORM_VERSION} \
-	 rw.ui-debug-${PLATFORM_VERSION} \
-	 rw.ui-config-${PLATFORM_VERSION} \
-	 rw.ui-dummy_component-${PLATFORM_VERSION}
+
+if [[ $PLATFORM == ub16 ]]; then
+    # install the RIFT platform code:
+    sudo apt-get install -y rw.toolchain-rwbase=${PLATFORM_VERSION} \
+	 rw.toolchain-rwtoolchain=${PLATFORM_VERSION} \
+	 rw.core.mgmt-mgmt=${PLATFORM_VERSION} \
+	 rw.core.util-util=${PLATFORM_VERSION} \
+	 rw.core.rwvx-rwvx=${PLATFORM_VERSION} \
+	 rw.core.rwvx-rwdts=${PLATFORM_VERSION} \
+	 rw.automation.core-RWAUTO=${PLATFORM_VERSION} \
+         rw.core.rwvx-rwha-1.0=${PLATFORM_VERSION}
+    
+    sudo chmod 777 /usr/rift /usr/rift/usr/share
+    
+    if $installSO; then
+	sudo apt-get install -y \
+	     rw.core.mc-\*=${PLATFORM_VERSION}
+    fi
+    
+    if $installUI; then
+	sudo apt-get install -y \
+	     rw.ui-about=${PLATFORM_VERSION} \
+	     rw.ui-logging=${PLATFORM_VERSION} \
+	     rw.ui-skyquake=${PLATFORM_VERSION} \
+	     rw.ui-accounts=${PLATFORM_VERSION} \
+	     rw.ui-composer=${PLATFORM_VERSION} \
+	     rw.ui-launchpad=${PLATFORM_VERSION} \
+	     rw.ui-debug=${PLATFORM_VERSION} \
+	     rw.ui-config=${PLATFORM_VERSION} \
+	     rw.ui-dummy_component=${PLATFORM_VERSION}
+    fi
+elif [[ $PLATFORM == fc20 ]]; then
+    
+    temp=$(mktemp -d /tmp/rw.XXX)
+    pushd $temp
+    
+    # yum does not accept the --nodeps and --replacefiles options so we
+    # download first and then install
+    yumdownloader rw.toolchain-rwbase-${PLATFORM_VERSION} \
+		  rw.toolchain-rwtoolchain-${PLATFORM_VERSION} \
+		  rw.core.mgmt-mgmt-${PLATFORM_VERSION} \
+		  rw.core.util-util-${PLATFORM_VERSION} \
+		  rw.core.rwvx-rwvx-${PLATFORM_VERSION} \
+		  rw.core.rwvx-rwha-1.0-${PLATFORM_VERSION} \
+		  rw.core.rwvx-rwdts-${PLATFORM_VERSION} \
+		  rw.automation.core-RWAUTO-${PLATFORM_VERSION}
+    
+    # Install one at a time so that pre-installed packages will not cause a failure
+    for pkg in *rpm; do
+	# Check to see if the package is already installed; do not try to install
+	# it again if it does, since this causes rpm -i to return failure.
+	if rpm -q $(rpm -q -p $pkg) >/dev/null; then
+	    echo "WARNING: package already installed: $pkg"
+	else
+	    sudo rpm -i --replacefiles --nodeps $pkg
+	fi
+    done
+    
+    popd
+    rm -rf $temp
+    
+    # this file gets in the way of the one generated by the build
+    sudo rm -f /usr/rift/usr/lib/libmano_yang_gen.so
+
+
+    sudo chmod 777 /usr/rift /usr/rift/usr/share
+
+    if $installSO; then
+	sudo apt-get install -y \
+	     rw.core.mc-\*-${PLATFORM_VERSION}
+    fi
+    
+    if $installUI; then
+	sudo apt-get install -y \
+	     rw.ui-about-${PLATFORM_VERSION} \
+	     rw.ui-logging-${PLATFORM_VERSION} \
+	     rw.ui-skyquake-${PLATFORM_VERSION} \
+	     rw.ui-accounts-${PLATFORM_VERSION} \
+	     rw.ui-composer-${PLATFORM_VERSION} \
+	     rw.ui-launchpad-${PLATFORM_VERSION} \
+	     rw.ui-debug-${PLATFORM_VERSION} \
+	     rw.ui-config-${PLATFORM_VERSION} \
+	     rw.ui-dummy_component-${PLATFORM_VERSION}
+    fi
+
+else
+    echo "Internal error: unknown platform $PLATFORM"
+    exit 1
 fi
 
 # install some base files used to create VNFs
