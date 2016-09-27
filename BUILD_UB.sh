@@ -14,7 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-# Author(s): Jeremy Mordkoff
+# Author(s): Jeremy Mordkoff, Lezz Giles
 # Creation Date: 8 Sep 2016 -- cloned from BUILD.sh and adapated for Ubuntu
 # 
 #
@@ -51,14 +51,14 @@ while true; do
 	    echo
 	    echo "SYNOPSIS:"
 	    echo "  $0 -h|--help"
-	    echo "  $0 [-o] [-u|-b PATH-TO-UI-REPO] [PLATFORM_REPOSITORY] [PLATFORM_VERSION]"
+	    echo "  $0 [-s] [-u|-b PATH-TO-UI-REPO] [PLATFORM_REPOSITORY] [PLATFORM_VERSION]"
 	    echo
 	    echo "DESCRIPTION:"
 	    echo "  Prepare current system to run SO and UI.  By default, the system"
 	    echo "  is set up to support building SO and UI; optionally, either or"
 	    echo "  both SO and UI can be installed from a Debian package repository."
 	    echo
-	    echo "  -o|--install-so:  install SO from package"
+	    echo "  -s|--install-so:  install SO from package"
 	    echo "  -u|--install-ui:  install UI from package"
 	    echo "  -b|--build-ui PATH-TO-UI-REPO:  build the UI in the specified repo"
 	    echo "  PLATFORM_REPOSITORY (optional): name of the RIFT.ware repository."
