@@ -390,8 +390,7 @@ class OpenmanoNsr(object):
                     if ip_profile:
                         openmano_instance_create["networks"][vld_msg.name]['ip-profile'] = ip_profile
 
-
-        return yaml.safe_dump(openmano_instance_create, default_flow_style=False)
+        return yaml.safe_dump(openmano_instance_create, default_flow_style=False,width=1000)
 
     @asyncio.coroutine
     def add_vlr(self, vlr):
