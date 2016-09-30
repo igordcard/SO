@@ -309,8 +309,9 @@ class OpenmanoNsr(object):
             user = {}
             user["name"] = user_entry.name
             user["key-pairs"] = list()
-            for ssh_key in user_entry.key_pair:
-                user["key-pairs"].append(ssh_key.key)
+            for ssh_key in user_entry.ssh_authorized_key:
+                if ssh_key.key_pair_ref in  self._key_pairs:
+                    user["key-pairs"].append(self._key_pairs[ssh_key.key_pair_ref].key)
             users.append(user)
 
         for user_entry in self._nsd_msg.user:

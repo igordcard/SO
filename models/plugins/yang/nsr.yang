@@ -98,7 +98,9 @@ module nsr
 
       leaf key-pair-ref {
         description "A reference to the key pair entry in the global key pair table";
-        type string; 
+        type leafref {
+          path "/nsr:key-pair/nsr:name";
+        }
       }
     }
     list user {
@@ -113,19 +115,17 @@ module nsr
         description "The user name's real name";
         type string;
       }
-      list key-pair {
-        key "name";
-        description "Used to configure the list of public keys to be injected as part
-            of ns instantiation";
+      list ssh-authorized-key {
+        key "key-pair-ref";
 
-        leaf name {
-          description "Name of this key pair";
-          type string;
-        }
+        description "Used to configure the list of public keys to be injected as part 
+                        of ns instantiation";
 
-        leaf key {
-          description "Key associated with this key pair";
-          type string;
+        leaf key-pair-ref {
+          description "A reference to the key pair entry in the global key pair table";
+          type leafref {
+            path "/nsr:key-pair/nsr:name";
+          }
         }
       }
     }
@@ -157,7 +157,9 @@ module nsr
       leaf nsd-ref {
         description "Reference to NSR ID ref";
         mandatory true;
-        type string; 
+        type leafref {
+          path "/nsd:nsd-catalog/nsd:nsd/nsd:id";
+        }
       }
       uses ns-instance-config-params;
     }
