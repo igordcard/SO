@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -402,13 +402,19 @@ def rift2openmano_vnfd(rift_vnfd):
         vnfc = {
             "name": vdu.name,
             "description": vdu.name,
-            "VNFC image": vdu.image if os.path.isabs(vdu.image) else "/var/images/{}".format(vdu.image),
             "numas": [{
                 "memory": max(int(vdu.vm_flavor.memory_mb/1024), 1),
                 "interfaces":[],
                 }],
             "bridge-ifaces": [],
             }
+
+        if os.path.isabs(vdu.image):
+            vnfc["VNFC image"] = vdu.image
+        else:
+            vnfc["image name"] = vdu.image
+            if vdu.has_field("image_checksum"):
+                vnfc["image checksum"] = vdu.image_checksum
 
         numa_node_policy = vdu.guest_epa.numa_node_policy
         if numa_node_policy.has_field("node"):
