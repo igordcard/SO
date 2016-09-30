@@ -240,22 +240,20 @@ class RiftCMRPCHandler(object):
             # The script has full path, use as is
             script = rpc_ip.user_defined_script
         else:
-            script = os.path.join(self._rift_artif_dir, 'launchpad/libs', agent_nsr.id, 'scripts',
+            script = os.path.join(self._rift_artif_dir, 'launchpad/packages/nsd',
+                                  agent_nsr.id, 'scripts',
                                   rpc_ip.user_defined_script)
             self._log.debug("CA-RPC: Checking for script in %s", script)
             if not os.path.exists(script):
                 script = os.path.join(self._rift_install_dir, 'usr/bin', rpc_ip.user_defined_script)
 
-        cmd = "{} {}".format(rpc_ip.user_defined_script, tmp_file.name)
+        cmd = "{} {}".format(script, tmp_file.name)
         self._log.debug("CA-RPC: Running the CMD: {}".format(cmd))
 
-        coro = asyncio.create_subprocess_shell(cmd, loop=self._loop,
-                                               stderr=asyncio.subprocess.PIPE)
-        process = yield from coro
-        err = yield from process.stderr.read()
-        task = self._loop.create_task(process.wait())
+        process = asyncio.create_subprocess_shell(cmd, loop=self._loop,
+                                                  stderr=asyncio.subprocess.PIPE)
 
-        return task, err
+        return process
 
     @asyncio.coroutine
     def register(self):
@@ -315,16 +313,12 @@ class RiftCMRPCHandler(object):
                 if nsd_cfg_prim_msg and nsd_cfg_prim_msg.has_field("user_defined_script"):
                     rpc_ip.user_defined_script = nsd_cfg_prim_msg.user_defined_script
 
-                    tasks = []
-                    task, err = yield from self._apply_ns_config(
+                    task = yield from self._apply_ns_config(
                         nsr,
                         vnfrs,
                         rpc_ip)
-                    tasks.append(task)
-                    if err:
-                        rpc_op.job_status_details = err.decode()
 
-                    self.job_manager.add_job(rpc_op, tasks)
+                    self.job_manager.add_job(rpc_op, [task])
                 else:
                     # Otherwise create VNF primitives.
                     for vnf in rpc_ip.vnf_list:

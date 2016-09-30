@@ -360,8 +360,8 @@ class JujuApi(object):
 
         # Optimizing calls to Juju, as currently we deploy only 1 unit per
         # service.
-        if self.service == service and len(self.units):
-            return self.units
+        # if self.service == service and len(self.units):
+        #     return self.units
 
         if env is None:
             env = self._get_env()

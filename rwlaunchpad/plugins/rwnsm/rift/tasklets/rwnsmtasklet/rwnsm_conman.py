@@ -62,7 +62,7 @@ class ROConfigManager(object):
             'received': nsrY.ConfigStates.CONFIGURING,
             'cfg_delay': nsrY.ConfigStates.CONFIGURING,
             'cfg_process': nsrY.ConfigStates.CONFIGURING,
-            'cfg_process-failed': nsrY.ConfigStates.CONFIGURING,
+            'cfg_process_failed': nsrY.ConfigStates.CONFIGURING,
             'cfg_sched': nsrY.ConfigStates.CONFIGURING,
             'connecting': nsrY.ConfigStates.CONFIGURING,
             'failed_connection': nsrY.ConfigStates.CONFIGURING,

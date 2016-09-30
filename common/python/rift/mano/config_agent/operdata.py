@@ -406,15 +406,31 @@ class ConfigAgentJobMonitor(object):
     @asyncio.coroutine
     def _monitor_processes(self, registration_handle):
         result = 0
+        errs = ""
         for process in self.job.tasks:
-            rc = yield from process
-            self.log.debug("Process {} returned rc: {}".format(process, rc))
+            if isinstance(process, asyncio.subprocess.Process):
+                rc = yield from process.wait()
+                err = yield from process.stderr.read()
+
+            else:
+                # Task instance
+                rc = yield from process
+                err = ''
+
+            self.log.debug("Process {} returned rc: {}, err: {}".
+                           format(process, rc, err))
+
+            if len(err):
+                errs += "<error>{}</error>".format(err)
             result |= rc
 
         if result == 0:
             self.job.job_status = "success"
         else:
             self.job.job_status = "failure"
+
+        if len(errs):
+            self.job.job.job_status_details = errs
 
         registration_handle.update_element(self.job.xpath, self.job.job)
 
