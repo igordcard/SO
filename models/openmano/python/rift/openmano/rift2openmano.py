@@ -25,6 +25,11 @@ import sys
 import tempfile
 import yaml
 
+import gi
+gi.require_version('RwYang', '1.0')
+gi.require_version('RwVnfdYang', '1.0')
+gi.require_version('RwNsdYang', '1.0')
+
 from gi.repository import (
     RwYang,
     RwVnfdYang,
@@ -356,10 +361,18 @@ def rift2openmano_vnfd(rift_vnfd):
     def rift2openmano_if_type(rift_type):
         if rift_type == "OM_MGMT":
             return "mgmt"
-        elif rift_type == "VIRTIO":
+        elif rift_type == "VIRTIO" or rift_type == "E1000":
             return "bridge"
         else:
             return "data"
+
+    def rift2openmano_vif(rift_type):
+        if rift_type == "VIRTIO":
+            return "virtio"
+        elif rift_type == "E1000":
+            return "e1000"
+        else:
+            raise ValueError("VDU Virtual Interface type {} not supported".format(rift_type))
 
     # Add all external connections
     for cp in rift_vnfd.cps:
@@ -465,7 +478,11 @@ def rift2openmano_vnfd(rift_vnfd):
             if int_if.virtual_interface.has_field("vpci"):
                 intf["vpci"] = int_if.virtual_interface.vpci
 
-            if int_if.virtual_interface.type_yang in ["VIRTIO", "OM_MGMT"]:
+            if int_if.virtual_interface.type_yang in ["VIRTIO", "E1000"]:
+                intf["model"] = rift2openmano_vif(int_if.virtual_interface.type_yang)
+                vnfc["bridge-ifaces"].append(intf)
+
+            elif int_if.virtual_interface.type_yang in ["OM_MGMT"]:
                 vnfc["bridge-ifaces"].append(intf)
 
             elif int_if.virtual_interface.type_yang == "SR-IOV":
