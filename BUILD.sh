@@ -95,9 +95,14 @@ set -x             # Print commands before executing them
 
 ###############################################################################
 # Find the platform
-if python -mplatform | grep -qi fedora; then
+PYTHON=python
+if [[ ! -f /usr/bin/python ]]; then
+  PYTHON=python3
+fi
+
+if $PYTHON -mplatform | grep -qi fedora; then
     PLATFORM=fc20
-elif python -mplatform | grep -qi ubuntu; then
+elif $PYTHON -mplatform | grep -qi ubuntu; then
     PLATFORM=ub16
 else
     echo "Unknown platform"
