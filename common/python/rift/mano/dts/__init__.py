@@ -20,9 +20,6 @@ from .core import DtsHandler
 # Subscribers
 from .subscriber.core import AbstractOpdataSubscriber, AbstractConfigSubscriber
 from .subscriber.vnf_subscriber import VnfdCatalogSubscriber, VnfrCatalogSubscriber
-from .subscriber.ns_subscriber import (
-        NsrCatalogSubscriber,
-        NsdCatalogSubscriber,
-        NsInstanceConfigSubscriber)
+from .subscriber.ns_subscriber import NsrCatalogSubscriber, NsdCatalogSubscriber
 from .subscriber.store import SubscriberStore
 from .subscriber.ro_account import ROAccountConfigSubscriber

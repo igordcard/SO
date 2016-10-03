@@ -177,33 +177,22 @@ class ROAccountPluginSelector(object):
                 self._loop,
                 callback=self.on_ro_account_change
                 )
-        self._nsr_sub = mano_dts.NsInstanceConfigSubscriber(
-                self._log,
-                self._dts,
-                self._loop,
-                self.handle_nsr)
 
         # The default plugin will be RwNsPlugin
+        self._plugin_instances = {}
         self._ro_plugin = self._create_plugin(self.DEFAULT_PLUGIN, None)
-        self.live_instances = 0
 
     @property
     def ro_plugin(self):
         return self._ro_plugin
 
-    def handle_nsr(self, nsr, action):
-        if action == rwdts.QueryAction.CREATE:
-            self.live_instances += 1
-        elif action == rwdts.QueryAction.DELETE:
-            self.live_instances -= 1
-
     def on_ro_account_change(self, ro_account, action):
-        if action in [rwdts.QueryAction.CREATE, rwdts.QueryAction.UPDATE]:
-            self._on_ro_account_change(ro_account)
+        if action == rwdts.QueryAction.CREATE:
+            self._on_ro_account_added(ro_account)
         elif action == rwdts.QueryAction.DELETE:
             self._on_ro_account_deleted(ro_account)
 
-    def _on_ro_account_change(self, ro_account):
+    def _on_ro_account_added(self, ro_account):
         self._log.debug("Got nsm plugin RO account: %s", ro_account)
         try:
             nsm_cls = self._nsm_plugins.class_by_plugin_name(
@@ -216,24 +205,25 @@ class ROAccountPluginSelector(object):
                 )
             nsm_cls = self.DEFAULT_PLUGIN
 
-        ro_plugin = self._create_plugin(nsm_cls, ro_account)
-        if self.live_instances == 0:
-            self._ro_plugin = ro_plugin
-        else:
-            raise ValueError("Unable to change the plugin when live NS instances exists!")
+        self._ro_plugin = self._create_plugin(nsm_cls, ro_account)
 
     def _on_ro_account_deleted(self, ro_account):
         self._ro_plugin = None
 
     def _create_plugin(self, nsm_cls, ro_account):
+        # Check to see if the plugin was already instantiated
+        if nsm_cls in self._plugin_instances:
+            self._log.debug("RO account nsm plugin already instantiated.  Using existing.")
+            return self._plugin_instances[nsm_cls]
 
+        # Otherwise, instantiate a new plugin using the cloud account
         self._log.debug("Instantiating new RO account using class: %s", nsm_cls)
         nsm_instance = nsm_cls(self._dts, self._log, self._loop,
                                self._records_publisher, ro_account)
 
+        self._plugin_instances[nsm_cls] = nsm_instance
         return nsm_instance
 
     @asyncio.coroutine
     def register(self):
         yield from self._ro_sub.register()
-        yield from self._nsr_sub.register()

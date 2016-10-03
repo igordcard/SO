@@ -59,11 +59,6 @@ rift_py3test(utest_rwnsm
   ${CMAKE_CURRENT_SOURCE_DIR}/utest_rwnsm.py
   )
 
-rift_py3test(utest_ro_account
-  TEST_ARGS
-  ${CMAKE_CURRENT_SOURCE_DIR}/utest_ro_account.py
-  )
-
 rift_py3test(tosca_ut
   TEST_ARGS
   ${CMAKE_CURRENT_SOURCE_DIR}/tosca_ut.py
