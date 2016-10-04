@@ -1807,9 +1807,10 @@ class NetworkServiceRecord(object):
             self._vnffgrs[vnffgr.id] = vnffgr
 
     def resolve_vld_ip_profile(self, nsd_msg, vld):
+        self._log.debug("Receieved ip profile ref is %s",vld.ip_profile_ref)
         if not vld.has_field('ip_profile_ref'):
             return None
-        profile = [ profile for profile in nsd_msg.ip_profiles if profile.name == vld.ip_profile_ref ]
+        profile = [profile for profile in nsd_msg.ip_profiles if profile.name == vld.ip_profile_ref]
         return profile[0] if profile else None
 
     @asyncio.coroutine
@@ -1913,8 +1914,8 @@ class NetworkServiceRecord(object):
 
         if vlr is None:
             cloud_account_list = self._extract_cloud_accounts_for_vl(vld)
-            for account in cloud_account_list:
-                vlr = yield from self._create_vls(vld, account)
+            for account,om_datacenter in cloud_account_list:
+                vlr = yield from self._create_vls(vld, account,om_datacenter)
                 self._vlrs.append(vlr)
 
         vlr.state = VlRecordState.INSTANTIATION_PENDING

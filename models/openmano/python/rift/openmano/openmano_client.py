@@ -309,6 +309,44 @@ class OpenmanoCliAPI(object):
 
         return uuid
 
+
+    def ns_vim_network_create(self, net_create_yaml_str,datacenter_name):
+        """ Create a Openmano VIM network from input YAML string """
+
+        self._log.debug("Creating VIM network instance: %s, DC %s", net_create_yaml_str,datacenter_name)
+
+        with tempfile.NamedTemporaryFile() as net_create_file_hdl:
+            net_create_file_hdl.write(net_create_yaml_str.encode())
+            net_create_file_hdl.flush()
+
+            try:
+                output_lines = self._openmano_cmd(
+                        ["vim-net-create","--datacenter", datacenter_name, net_create_file_hdl.name],
+                        expected_lines=1
+                        )
+            except OpenmanoCommandFailed as e:
+                raise
+
+        uuid, _ = output_lines[0].split(" ", 1)
+
+        self._log.info("VIM Networks created in DC %s with ID: %s", datacenter_name, uuid)
+
+        return uuid
+
+    def ns_vim_network_delete(self, network_name,datacenter_name):
+        """ Delete a Openmano VIM network with given name """
+
+        self._log.debug("Deleting VIM network instance: %s, DC %s", network_name,datacenter_name)
+        try:
+            output_lines = self._openmano_cmd(
+                    ["vim-net-delete","--datacenter", datacenter_name, network_name],
+                    expected_lines=1
+                    )
+        except OpenmanoCommandFailed as e:
+            raise
+        self._log.info("VIM Network deleted in DC %s with name: %s", datacenter_name, network_name)
+
+
     def ns_instantiate(self, scenario_name, instance_name, datacenter_name=None):
         self._log.info(
                 "Instantiating NS %s using instance name %s",
