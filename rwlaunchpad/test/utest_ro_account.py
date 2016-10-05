@@ -114,7 +114,7 @@ class RoAccountDtsTestCase(rift.test.dts.AbstractDTSTest):
         mock_orch_acc = launchpadyang.ResourceOrchestrator.from_dict(
                 {'name': 'rift-ro', 'account_type': 'rift_ro', 'rift_ro': {'rift_ro': True}})
 
-        # Test rift-ro plugin
+        # Test rift-ro plugin CREATE
         w_xpath = "C,/rw-launchpad:resource-orchestrator"
         xpath = w_xpath
         yield from self.publisher.publish(w_xpath, xpath, mock_orch_acc)
@@ -122,16 +122,36 @@ class RoAccountDtsTestCase(rift.test.dts.AbstractDTSTest):
 
         assert type(orch.ro_plugin) is cloud.RwNsPlugin
 
-        # Test Openmano plugin
+        # Test Openmano plugin CREATE
         mock_orch_acc = launchpadyang.ResourceOrchestrator.from_dict(
                 {'name': 'openmano',
                  'account_type': 'openmano',
-                 'openmano': {'tenant_id': "abc"}})
+                 'openmano': {'tenant_id': "abc",
+                              "port": 9999,
+                              "host": "10.64.11.77"}})
         yield from self.publisher.publish(w_xpath, xpath, mock_orch_acc)
         yield from asyncio.sleep(5, loop=self.loop)
 
-        print (type(orch.ro_plugin))
         assert type(orch.ro_plugin) is openmano_nsm.OpenmanoNsPlugin
+        assert orch.ro_plugin._cli_api._port  == mock_orch_acc.openmano.port
+        assert orch.ro_plugin._cli_api._host  == mock_orch_acc.openmano.host
+
+        # Test update
+        mock_orch_acc.openmano.port = 9789
+        mock_orch_acc.openmano.host = "10.64.11.78"
+        yield from self.dts.query_update("C,/rw-launchpad:resource-orchestrator",
+                rwdts.XactFlag.ADVISE, mock_orch_acc)
+        assert orch.ro_plugin._cli_api._port  == mock_orch_acc.openmano.port
+        assert orch.ro_plugin._cli_api._host  == mock_orch_acc.openmano.host
+
+        # Test update when a live instance exists
+        # Exception should be thrown
+        orch.handle_nsr(None, rwdts.QueryAction.CREATE)
+        mock_orch_acc.openmano.port = 9788
+
+        with self.assertRaises(Exception):
+            yield from self.dts.query_update("C,/rw-launchpad:resource-orchestrator",
+                    rwdts.XactFlag.ADVISE, mock_orch_acc)
 
         # Test delete
         yield from self.dts.query_delete("C,/rw-launchpad:resource-orchestrator",
