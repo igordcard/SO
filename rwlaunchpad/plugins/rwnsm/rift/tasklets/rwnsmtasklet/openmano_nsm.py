@@ -32,6 +32,8 @@ from gi.repository import (
 import rift.openmano.rift2openmano as rift2openmano
 import rift.openmano.openmano_client as openmano_client
 from . import rwnsmplugin
+from enum import Enum
+
 
 import rift.tasklets
 
@@ -238,6 +240,21 @@ class OpenmanoVnfr(object):
                 )
 
 
+class OpenmanoNSRecordState(Enum):
+    """ Network Service Record State """
+    INIT = 101
+    INSTANTIATION_PENDING = 102
+    RUNNING = 103
+    SCALING_OUT = 104
+    SCALING_IN = 105
+    TERMINATE = 106
+    TERMINATE_RCVD = 107
+    TERMINATED = 108
+    FAILED = 109
+    VL_INSTANTIATE = 110
+    VL_TERMINATE = 111
+
+
 class OpenmanoNsr(object):
     TIMEOUT_SECS = 300
 
@@ -265,6 +282,7 @@ class OpenmanoNsr(object):
         self._created = False
 
         self._monitor_task = None
+        self._state = OpenmanoNSRecordState.INIT
 
     @property
     def nsd(self):
@@ -396,6 +414,18 @@ class OpenmanoNsr(object):
     @asyncio.coroutine
     def add_vlr(self, vlr):
         self._vlrs.append(vlr)
+        yield from asyncio.sleep(1, loop=self._loop)
+
+    @asyncio.coroutine
+    def remove_vlr(self, vlr):
+        if vlr in self._vlrs:
+            self._vlrs.remove(vlr)
+            if not  vlr.vld_msg.vim_network_name:
+                yield from self._loop.run_in_executor(
+                    None,
+                    self._cli_api.ns_vim_network_delete,
+                    vlr.name,
+                    vlr.om_datacenter_name)
         yield from asyncio.sleep(1, loop=self._loop)
 
     @asyncio.coroutine
@@ -566,6 +596,7 @@ class OpenmanoNsr(object):
                     self._log.debug("Found VNF status: %s", vnf_status)
                     if vnf_status is None:
                         self._log.error("Could not find VNF status from openmano")
+                        self._state = OpenmanoNSRecordState.FAILED
                         vnfr_msg.operational_status = "failed"
                         yield from self._publisher.publish_vnfr(None, vnfr_msg)
                         return
@@ -573,6 +604,7 @@ class OpenmanoNsr(object):
                     # If there was a VNF that has a errored VM, then just fail the VNF and stop monitoring.
                     if any_vms_error(vnf_status):
                         self._log.debug("VM was found to be in error state.  Marking as failed.")
+                        self._state = OpenmanoNSRecordState.FAILED
                         vnfr_msg.operational_status = "failed"
                         yield from self._publisher.publish_vnfr(None, vnfr_msg)
                         return
@@ -618,17 +650,20 @@ class OpenmanoNsr(object):
 
                     if (time.time() - start_time) > OpenmanoNsr.TIMEOUT_SECS:
                         self._log.error("NSR timed out before reaching running state")
+                        self._state = OpenmanoNSRecordState.FAILED
                         vnfr_msg.operational_status = "failed"
                         yield from self._publisher.publish_vnfr(None, vnfr_msg)
                         return
 
                 except Exception as e:
                     vnfr_msg.operational_status = "failed"
+                    self._state = OpenmanoNSRecordState.FAILED
                     yield from self._publisher.publish_vnfr(None, vnfr_msg)
                     self._log.exception("Caught exception publishing vnfr info: %s", str(e))
                     return
 
             if len(active_vnfs) == len(self._vnfrs):
+                self._state = OpenmanoNSRecordState.RUNNING
                 self._log.info("All VNF's are active.  Exiting NSR monitoring task")
                 return
 
@@ -660,6 +695,7 @@ class OpenmanoNsr(object):
                     self._cli_api.ns_instance_scenario_create,
                     self.openmano_instance_create_yaml)
 
+        self._state = OpenmanoNSRecordState.INSTANTIATION_PENDING
 
         self._monitor_task = asyncio.ensure_future(
                 self.instance_monitor_task(), loop=self._loop
@@ -686,6 +722,50 @@ class OpenmanoNsr(object):
                self._nsr_uuid,
                )
 
+    @asyncio.coroutine
+    def create_vlr(self,vlr):
+        self._log.debug("Creating openmano vim network VLR name %s, VLR DC: %s",vlr.vld_msg.name,
+                                     vlr.om_datacenter_name)
+        net_create = {}
+        net = {}
+        net['name'] = vlr.name
+        net['shared'] = True
+        net['type'] = 'bridge'
+        self._log.debug("Received ip profile is %s",vlr._ip_profile)
+        if vlr._ip_profile and vlr._ip_profile.has_field("ip_profile_params"):
+            ip_profile_params = vlr._ip_profile.ip_profile_params
+            ip_profile = {}
+            if ip_profile_params.ip_version == "ipv6":
+                ip_profile['ip_version'] = "IPv6"
+            else:
+                ip_profile['ip_version'] = "IPv4" 
+            if ip_profile_params.has_field('subnet_address'):
+                ip_profile['subnet_address'] = ip_profile_params.subnet_address
+            if ip_profile_params.has_field('gateway_address'):
+                ip_profile['gateway_address'] = ip_profile_params.gateway_address
+            if ip_profile_params.has_field('dns_server') and len(ip_profile_params.dns_server) > 0:
+                ip_profile['dns_address'] =  ip_profile_params.dns_server[0].address
+            if ip_profile_params.has_field('dhcp_params'):
+                ip_profile['dhcp_enabled'] = ip_profile_params.dhcp_params.enabled
+                ip_profile['dhcp_start_address'] = ip_profile_params.dhcp_params.start_address
+                ip_profile['dhcp_count'] = ip_profile_params.dhcp_params.count
+            net['ip_profile'] = ip_profile
+        net_create["network"]= net   
+
+        net_create_msg = yaml.safe_dump(net_create,default_flow_style=False)
+        fpath = dump_openmano_descriptor(
+            "{}_vim_net_create_{}".format(self._nsr_config_msg.name,vlr.name),
+             net_create_msg)
+        self._log.debug("Dumped Openmano VIM Net create to: %s", fpath)
+
+        vim_network_uuid = yield from self._loop.run_in_executor(
+                    None,
+                    self._cli_api.ns_vim_network_create,
+                    net_create_msg,
+                    vlr.om_datacenter_name)
+        self._vlrs.append(vlr)
+
+           
 
 class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
     """
@@ -774,7 +854,10 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         """
         self._log.debug("Received instantiate VL for NSR {}; VLR {}".format(nsr.id,vlr))
         openmano_nsr = self._openmano_nsrs[nsr.id]
-        yield from openmano_nsr.add_vlr(vlr)
+        if openmano_nsr._state == OpenmanoNSRecordState.RUNNING:
+            yield from openmano_nsr.create_vlr(vlr)
+        else: 
+            yield from openmano_nsr.add_vlr(vlr)
 
     @asyncio.coroutine
     def terminate_ns(self, nsr):
@@ -805,5 +888,8 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         """
         Terminate the virtual link
         """
-        pass
+        self._log.debug("Received terminate VL for VLR {}".format(vlr))
+        openmano_nsr = self._openmano_nsrs[vlr._nsr_id]
+        yield from openmano_nsr.remove_vlr(vlr)
+
 

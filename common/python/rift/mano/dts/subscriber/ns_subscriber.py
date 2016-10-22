@@ -50,3 +50,13 @@ class NsdCatalogSubscriber(core.AbstractConfigSubscriber):
 
     def get_xpath(self):
         return "C,/nsd:nsd-catalog/nsd:nsd"
+
+
+class NsInstanceConfigSubscriber(core.AbstractConfigSubscriber):
+    """ The network service descriptor DTS handler """
+
+    def key_name(self):
+        return "id"
+
+    def get_xpath(self):
+        return "C,/nsr:ns-instance-config/nsr:nsr"

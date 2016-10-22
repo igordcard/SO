@@ -398,8 +398,8 @@ def rift2openmano_vnfd(rift_vnfd):
             }
 
         # Add the specific VDU connection points
-        for int_cp_ref in vld.internal_connection_point_ref:
-            vdu, int_if = find_vdu_and_int_if_by_cp_ref(int_cp_ref)
+        for int_cp in vld.internal_connection_point:
+            vdu, int_if = find_vdu_and_int_if_by_cp_ref(int_cp.id_ref)
             connection["elements"].append({
                 "VNFC": vdu.name,
                 "local_iface_name": int_if.name,
@@ -415,12 +415,11 @@ def rift2openmano_vnfd(rift_vnfd):
         vnfc = {
             "name": vdu.name,
             "description": vdu.name,
-            "numas": [{
-                "memory": max(int(vdu.vm_flavor.memory_mb/1024), 1),
-                "interfaces":[],
-                }],
             "bridge-ifaces": [],
             }
+
+        if vdu.vm_flavor.has_field("storage_gb") and vdu.vm_flavor.storage_gb:
+            vnfc["disk"] = vdu.vm_flavor.storage_gb
 
         if os.path.isabs(vdu.image):
             vnfc["VNFC image"] = vdu.image
@@ -429,23 +428,36 @@ def rift2openmano_vnfd(rift_vnfd):
             if vdu.has_field("image_checksum"):
                 vnfc["image checksum"] = vdu.image_checksum
 
-        numa_node_policy = vdu.guest_epa.numa_node_policy
-        if numa_node_policy.has_field("node"):
-            numa_node = numa_node_policy.node[0]
+        if vdu.guest_epa.has_field("numa_node_policy"):
+            vnfc["numas"] = [{
+                           "memory": max(int(vdu.vm_flavor.memory_mb/1024), 1),
+                           "interfaces":[],
+                           }]
+            numa_node_policy = vdu.guest_epa.numa_node_policy
+            if numa_node_policy.has_field("node"):
+                numa_node = numa_node_policy.node[0]
 
-            if numa_node.has_field("paired_threads"):
-                if numa_node.paired_threads.has_field("num_paired_threads"):
-                    vnfc["numas"][0]["paired-threads"] = numa_node.paired_threads.num_paired_threads
-                if len(numa_node.paired_threads.paired_thread_ids) > 0:
-                    vnfc["numas"][0]["paired-threads-id"] = []
-                    for pair in numa_node.paired_threads.paired_thread_ids:
-                         vnfc["numas"][0]["paired-threads-id"].append(
-                                 [pair.thread_a, pair.thread_b]
-                                 )
+                if numa_node.has_field("paired_threads"):
+                    if numa_node.paired_threads.has_field("num_paired_threads"):
+                        vnfc["numas"][0]["paired-threads"] = numa_node.paired_threads.num_paired_threads
+                    if len(numa_node.paired_threads.paired_thread_ids) > 0:
+                        vnfc["numas"][0]["paired-threads-id"] = []
+                        for pair in numa_node.paired_threads.paired_thread_ids:
+                             vnfc["numas"][0]["paired-threads-id"].append(
+                                     [pair.thread_a, pair.thread_b]
+                                     )
+
+            else:
+                if vdu.vm_flavor.has_field("vcpu_count"):
+                    vnfc["numas"][0]["cores"] = max(vdu.vm_flavor.vcpu_count, 1)
 
         else:
-            if vdu.vm_flavor.has_field("vcpu_count"):
-                vnfc["numas"][0]["cores"] = max(vdu.vm_flavor.vcpu_count, 1)
+            if vdu.vm_flavor.has_field("vcpu_count") and vdu.vm_flavor.vcpu_count:
+                vnfc["vcpus"] = vdu.vm_flavor.vcpu_count
+
+            if vdu.vm_flavor.has_field("memory_mb") and vdu.vm_flavor.memory_mb:
+                vnfc["ram"] = vdu.vm_flavor.memory_mb
+
 
         if vdu.has_field("hypervisor_epa"):
             vnfc["hypervisor"] = {}
@@ -463,11 +475,8 @@ def rift2openmano_vnfd(rift_vnfd):
             if vdu.host_epa.has_field("om_cpu_feature"):
                 vnfc["processor"]["features"] = []
                 for feature in vdu.host_epa.om_cpu_feature:
-                    vnfc["processor"]["features"].append(feature)
+                    vnfc["processor"]["features"].append(feature.feature)
 
-
-        if vdu.vm_flavor.has_field("storage_gb"):
-            vnfc["disk"] = vdu.vm_flavor.storage_gb
 
         vnf["VNFC"].append(vnfc)
 
