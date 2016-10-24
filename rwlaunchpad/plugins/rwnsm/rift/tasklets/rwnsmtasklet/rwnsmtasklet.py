@@ -4097,7 +4097,10 @@ class NsManager(object):
 
         # Terminate the instances/networks assocaited with this nw service
         self._log.debug("Terminating the network service %s", nsr_id)
-        yield from self._nsrs[nsr_id].terminate()
+        try :
+            yield from self._nsrs[nsr_id].terminate()
+        except Exception as e:
+            self.log.exception("Failed to terminate NSR[id=%s]", nsr_id)
 
         # Unref the NSD
         yield from self.nsd_unref_by_nsr_id(nsr_id)
