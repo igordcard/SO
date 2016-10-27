@@ -25,7 +25,7 @@ module rw-sdn
 
 
   import rw-pb-ext {
-    prefix "rw-pb-ext";
+    prefix "rwpb";
   }
 
   import rwsdn {
@@ -37,16 +37,17 @@ module rw-sdn
       "Initial revision.";
   }
 
-  list sdn-account {
-    rw-pb-ext:msg-new SDNAccountConfig;
+  container sdn {
+    list account {
+      rwpb:msg-new SDNAccountConfig;
+      key "name";
+      leaf name {
+	type string;
+      }
 
-    key "name";
-    leaf name {
-      type string;
+      uses rwsdn:sdn-provider-auth;
+      uses rwsdn:connection-status;
     }
-
-    uses rwsdn:sdn-provider-auth;
-    uses rwsdn:connection-status;
   }
 
   rpc update-sdn-status {

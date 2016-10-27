@@ -133,7 +133,7 @@ module nsr
 
   list key-pair {
     key "name";
-    description "Used to configure the list of public keys to be injected as part 
+    description "Used to configure the list of public keys to be injected as part
                  of ns instantiation";
     leaf name {
       description "Name of this key pair";
@@ -151,7 +151,7 @@ module nsr
     input {
       leaf name {
         mandatory true;
-        description "Name of the Network Service"; 
+        description "Name of the Network Service";
         type string;
       }
       leaf nsd-ref {
@@ -265,8 +265,8 @@ module nsr
     key "placement-group-ref vnfd-id-ref";
 
     leaf vnfd-id-ref {
-      description 
-          "A reference to a vnfd. This is a 
+      description
+          "A reference to a vnfd. This is a
           leafref to path:
           ../../../../nsd:constituent-vnfd
           + [nsr:id = current()/../nsd:id-ref]
@@ -327,7 +327,7 @@ module nsr
             "The SDN account to use when requesting resources for
             this vnffgr";
         type leafref {
-          path "/rwsdn:sdn-account/rwsdn:name";
+          path "/rwsdn:sdn/rwsdn:account/rwsdn:name";
         }
       }
 

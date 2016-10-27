@@ -190,7 +190,7 @@ class VnffgMgr(object):
                 vnfr.mgmt_address = cp_ref.connection_point_params.mgmt_address
                 vnfr.mgmt_port = 5000
                 vnfr_list.append(vnfr)
-            
+
                 vdu = vnfr.vdu_list.add()
                 vdu.name = cp_ref.connection_point_params.name
                 vdu.port_id = cp_ref.connection_point_params.port_id
@@ -220,9 +220,9 @@ class VnffgMgr(object):
         if(len(classifier_list) == 2):
             meta[vnffgr.classifier[0].id] = '0x' + ''.join(str("%0.2X"%int(i)) for i in vnffgr.classifier[1].ip_address.split('.'))
             meta[vnffgr.classifier[1].id] = '0x' + ''.join(str("%0.2X"%int(i)) for i in vnffgr.classifier[0].ip_address.split('.'))
-            
+
         self._log.debug("VNFFG Meta VNFFG chain is {}".format(meta))
-        
+
         for classifier in classifier_list:
             vnffgr_cl = [_classifier  for _classifier in vnffgr.classifier if classifier.id == _classifier.id]
             if len(vnffgr_cl) > 0:
@@ -236,8 +236,8 @@ class VnffgMgr(object):
             vnffgcl.port_id = vnffgr_cl[0].port_id
             vnffgcl.vm_id = vnffgr_cl[0].vm_id
             # Get the symmetric classifier endpoint ip and set it in nsh ctx1
-            
-            vnffgcl.vnffg_metadata.ctx1 =  meta.get(vnffgr_cl[0].id,'0') 
+
+            vnffgcl.vnffg_metadata.ctx1 =  meta.get(vnffgr_cl[0].id,'0')
             vnffgcl.vnffg_metadata.ctx2 = '0'
             vnffgcl.vnffg_metadata.ctx3 = '0'
             vnffgcl.vnffg_metadata.ctx4 = '0'
@@ -323,7 +323,7 @@ class VnffgMgr(object):
         del self._vnffgr_list[vnffgr_id]
 
 class SDNAccountDtsHandler(object):
-    XPATH = "C,/rw-sdn:sdn-account"
+    XPATH = "C,/rw-sdn:sdn/rw-sdn:account"
 
     def __init__(self, dts, log, parent):
         self._dts = dts
