@@ -220,7 +220,6 @@ class VnffgRecord(object):
 
         if self._vnffgr_state == VnffgRecordState.INIT:
             vnffgr_dict = {"id": self._vnffgr_id,
-                           "nsd_id": self._nsr.nsd_id,
                            "vnffgd_id_ref": self._vnffgd_msg.id,
                            "vnffgd_name_ref": self._vnffgd_msg.name,
                            "sdn_account": self._sdn_account_name,
@@ -229,7 +228,6 @@ class VnffgRecord(object):
             vnffgr = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_Vnffgr.from_dict(vnffgr_dict)
         elif self._vnffgr_state == VnffgRecordState.TERMINATED:
             vnffgr_dict = {"id": self._vnffgr_id,
-                           "nsd_id": self._nsr.nsd_id,
                            "vnffgd_id_ref": self._vnffgd_msg.id,
                            "vnffgd_name_ref": self._vnffgd_msg.name,
                            "sdn_account": self._sdn_account_name,
@@ -243,7 +241,6 @@ class VnffgRecord(object):
                 self._log.exception("Fetching VNFFGR for VNFFG with id %s failed", self._vnffgr_id)
                 self._vnffgr_state = VnffgRecordState.FAILED
                 vnffgr_dict = {"id": self._vnffgr_id,
-                               "nsd_id": self._nsr.nsd_id,
                                "vnffgd_id_ref": self._vnffgd_msg.id,
                                "vnffgd_name_ref": self._vnffgd_msg.name,
                                "sdn_account": self._sdn_account_name,
@@ -257,7 +254,6 @@ class VnffgRecord(object):
     def vnffgr_create_msg(self):
         """ Virtual Link Record message for Creating VLR in VNS """
         vnffgr_dict = {"id": self._vnffgr_id,
-                       "nsd_id": self._nsr.nsd_id,
                        "vnffgd_id_ref": self._vnffgd_msg.id,
                        "vnffgd_name_ref": self._vnffgd_msg.name,
                        "sdn_account": self._sdn_account_name,
