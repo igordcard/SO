@@ -64,8 +64,8 @@ module rw-nsr
       key "id";
       description
         "Recent operational events for this network service.
-        Though the model does not impose any restrictions on the numbe of events, 
-        the max operational events will be limited to the most recent 10"; 
+        Though the model does not impose any restrictions on the numbe of events,
+        the max operational events will be limited to the most recent 10";
 
       leaf id {
         description "The id of the instance";
@@ -137,9 +137,9 @@ module rw-nsr
          by multiple cloud accounts when that becomes available.";
       type string;
     }
-      
+
     list vnf-cloud-account-map {
-      description 
+      description
           "Mapping VNF to Cloud Account where VNF will be instantiated";
 
       key "member-vnf-index-ref";
@@ -178,13 +178,13 @@ module rw-nsr
     }
 
     list vl-cloud-account-map {
-      description 
+      description
           "Mapping VL to Cloud Account where VL will be instantiated";
 
       key "vld-id-ref";
 
       leaf vld-id-ref {
-        description 
+        description
             "A reference to a vld.
             leafref path ../../nsd/vld/id";
         type string;
@@ -218,7 +218,7 @@ module rw-nsr
 
   augment /nsr:start-network-service/nsr:input{
     uses rw-ns-instance-config;
-  } 
+  }
 
   augment /nsr:ns-instance-opdata/nsr:nsr {
     uses manotypes:action-param;
@@ -229,7 +229,7 @@ module rw-nsr
         "The SDN account associted with the cloud account using which an
          NS was instantiated.";
       type leafref {
-        path "/rw-sdn:sdn-account/rw-sdn:name";
+        path "/rw-sdn:sdn/rw-sdn:account/rw-sdn:name";
       }
     }
 
@@ -438,7 +438,7 @@ module rw-nsr
 
   notification nsm-notification {
     description "Notification for NSM Events.
-        The timestamp of this event is automatically expressed 
+        The timestamp of this event is automatically expressed
         in human readble format - 1970-01-01T00:00:00Z";
 
     leaf event {
