@@ -546,6 +546,11 @@ class OpenmanoNsr(object):
                     return vnf["ip_address"].strip()
                 return None
 
+            def get_vnf_mac_address(vnf):
+                if "mac_address" in vnf:
+                    return vnf["mac_address"].strip()
+                return None
+
             def get_ext_cp_info(vnf):
                 cp_info_list = []
                 for vm in vnf["vms"]:
@@ -563,7 +568,11 @@ class OpenmanoNsr(object):
                         if ip_address is None:
                             ip_address = "0.0.0.0"
 
-                        cp_info_list.append((intf["external_name"], ip_address))
+                        mac_address = intf["mac_address"]
+                        if mac_address is None:
+                            mac_address="00:00:00:00:00:00"
+
+                        cp_info_list.append((intf["external_name"], ip_address, mac_address))
 
                 return cp_info_list
 
@@ -611,6 +620,7 @@ class OpenmanoNsr(object):
 
                     if all_vms_active(vnf_status):
                         vnf_ip_address = get_vnf_ip_address(vnf_status)
+                        vnf_mac_address = get_vnf_mac_address(vnf_status)
 
                         if vnf_ip_address is None:
                             self._log.warning("No IP address obtained "
@@ -621,7 +631,7 @@ class OpenmanoNsr(object):
                         self._log.debug("All VMs in VNF are active.  Marking as running.")
                         vnfr_msg.operational_status = "running"
 
-                        self._log.debug("Got VNF ip address: %s", vnf_ip_address)
+                        self._log.debug("Got VNF ip address: %s, mac-address: %s", vnf_ip_address, vnf_mac_address)
                         vnfr_msg.mgmt_interface.ip_address = vnf_ip_address
                         vnfr_msg.vnf_configuration.config_access.mgmt_ip_address = vnf_ip_address
 
@@ -639,11 +649,12 @@ class OpenmanoNsr(object):
 
                         # Add connection point information for the config manager
                         cp_info_list = get_ext_cp_info(vnf_status)
-                        for (cp_name, cp_ip) in cp_info_list:
+                        for (cp_name, cp_ip, cp_mac_addr) in cp_info_list:
                             cp = vnfr_msg.connection_point.add()
                             cp.name = cp_name
                             cp.short_name = cp_name
                             cp.ip_address = cp_ip
+                            cp.mac_address = cp_mac_addr
 
                         yield from self._publisher.publish_vnfr(None, vnfr_msg)
                         active_vnfs.append(vnfr)

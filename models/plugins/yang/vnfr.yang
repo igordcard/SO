@@ -191,7 +191,7 @@ module vnfr
       }
 
       leaf create-time {
-        description 
+        description
           "Creation timestamp of this Virtual Network 
           Function.  The timestamp is expressed as 
           seconds since unix epoch - 1970-01-01T00:00:00Z";
@@ -252,7 +252,7 @@ module vnfr
         uses vnfd:common-connection-point;
 
         leaf vlr-ref {
-          description 
+          description
               "Reference to the VLR associated with this connection point";
           type  leafref {
             path "/vlr:vlr-catalog/vlr:vlr/vlr:id";
@@ -260,9 +260,15 @@ module vnfr
         }
 
         leaf ip-address {
-          description 
+          description
               "IP address assigned to the external connection point";
           type inet:ip-address;
+        }
+        leaf mac-address {
+          description
+              "MAC address assigned to the external connection point";
+          // type inet:mac-address;
+          type string;
         }
         leaf connection-point-id {
           rwpb:field-inline "true";
@@ -351,9 +357,15 @@ module vnfr
           uses vnfd:common-connection-point;
 
           leaf ip-address {
-            description 
-                "IP address assigned to the external connection point";
+            description
+                "IP address assigned to the internal connection point";
             type inet:ip-address;
+          }
+          leaf mac-address {
+            description
+                "MAC address assigned to the internal connection point";
+            // type inet:mac-address;
+            type string;
           }
         }
 

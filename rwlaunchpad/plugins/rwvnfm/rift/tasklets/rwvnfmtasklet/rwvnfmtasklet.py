@@ -308,6 +308,14 @@ class VirtualDeploymentUnitRecord(object):
                     return conn_point.ip_address
         return "0.0.0.0"
 
+    def cp_mac_addr(self, cp_name):
+        """ Find mac address by connection point name """
+        if self._vm_resp is not None:
+            for conn_point in self._vm_resp.connection_points:
+                if conn_point.name == cp_name:
+                    return conn_point.mac_addr
+        return "00:00:00:00:00:00"
+
     def cp_id(self, cp_name):
         """ Find connection point id  by connection point name """
         if self._vm_resp is not None:
@@ -408,7 +416,8 @@ class VirtualDeploymentUnitRecord(object):
             icp_list.append({"name": cp.name,
                              "id": cp.id,
                              "type_yang": "VPORT",
-                             "ip_address": self.cp_ip_addr(cp.id)})
+                             "ip_address": self.cp_ip_addr(cp.id),
+                             "mac_address": self.cp_mac_addr(cp.id)})
 
             ii_list.append({"name": intf.name,
                             "vdur_internal_connection_point_ref": cp.id,
@@ -423,7 +432,10 @@ class VirtualDeploymentUnitRecord(object):
             ei_list.append({"name": cp,
                             "vnfd_connection_point_ref": cp,
                             "virtual_interface": {}})
-            self._vnfr.update_cp(cp, self.cp_ip_addr(cp), self.cp_id(cp))
+            self._vnfr.update_cp(cp,
+                                 self.cp_ip_addr(cp),
+                                 self.cp_mac_addr(cp),
+                                 self.cp_id(cp))
 
         vdur_dict["external_interface"] = ei_list
 
@@ -1651,13 +1663,14 @@ class VirtualNetworkFunctionRecord(object):
         # Update the VNFR with the changed status
         yield from self.publish(None)
 
-    def update_cp(self, cp_name, ip_address, cp_id):
+    def update_cp(self, cp_name, ip_address, mac_addr, cp_id):
         """Updated the connection point with ip address"""
         for cp in self._cprs:
             if cp.name == cp_name:
                 self._log.debug("Setting ip address and id for cp %s, cpr %s with ip %s id %s",
                                 cp_name, cp, ip_address, cp_id)
                 cp.ip_address = ip_address
+                cp.mac_address = mac_addr
                 cp.connection_point_id = cp_id
                 return
 

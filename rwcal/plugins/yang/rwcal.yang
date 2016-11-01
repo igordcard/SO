@@ -1092,6 +1092,12 @@ module rwcal
       rwpb:field-string-max 64;
       type string;
     }
+
+    leaf mac-addr {
+      rwpb:field-inline "true";
+      rwpb:field-string-max 48;
+      type string;
+    }
   }
 
   grouping virtual-link-info-params {
