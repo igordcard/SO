@@ -427,8 +427,11 @@ def rift2openmano_vnfd(rift_vnfd):
             vnfc["image name"] = vdu.image
             if vdu.has_field("image_checksum"):
                 vnfc["image checksum"] = vdu.image_checksum
-
-        if vdu.guest_epa.has_field("numa_node_policy"):
+        dedicated_int = False
+        for intf in list(vdu.internal_interface) + list(vdu.external_interface):
+            if intf.virtual_interface.type_yang in ["SR_IOV", "PCI_PASSTHROUGH"]:
+                dedicated_int = True
+        if vdu.guest_epa.has_field("numa_node_policy") or dedicated_int:
             vnfc["numas"] = [{
                            "memory": max(int(vdu.vm_flavor.memory_mb/1024), 1),
                            "interfaces":[],
@@ -494,9 +497,9 @@ def rift2openmano_vnfd(rift_vnfd):
             elif int_if.virtual_interface.type_yang in ["OM_MGMT"]:
                 vnfc["bridge-ifaces"].append(intf)
 
-            elif int_if.virtual_interface.type_yang == "SR-IOV":
+            elif int_if.virtual_interface.type_yang == "SR_IOV":
                 intf["bandwidth"] = "10 Gbps"
-                intf["dedicated"] = "yes:sriov"
+                intf["dedicated"] = "no"
                 vnfc["numas"][0]["interfaces"].append(intf)
 
             elif int_if.virtual_interface.type_yang == "PCI_PASSTHROUGH":
