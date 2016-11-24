@@ -147,7 +147,7 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 vnf_mon = vnfr_core.VnfMonitorDtsHandler.from_vnf_data(
                         self,
                         vnfr,
-                        self.store.get_vnfd(vnfr.vnfd_ref))
+                        self.store.get_vnfd(vnfr.vnfd.id))
 
                 self.vnfr_monitors[vnfr.id] = vnf_mon
                 self.vnfrs[vnfr.id] = vnfr

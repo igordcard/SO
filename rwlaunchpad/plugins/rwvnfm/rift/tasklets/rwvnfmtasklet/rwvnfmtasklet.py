@@ -1076,13 +1076,13 @@ class VirtualNetworkFunctionRecord(object):
         self._cluster_name = cluster_name
         self._vnfr_msg = vnfr_msg
         self._vnfr_id = vnfr_msg.id
-        self._vnfd_id = vnfr_msg.vnfd_ref
+        self._vnfd_id = vnfr_msg.vnfd.id
         self._vnfm = vnfm
         self._vcs_handler = vcs_handler
         self._vnfr = vnfr_msg
         self._mgmt_network = mgmt_network
 
-        self._vnfd = None
+        self._vnfd = vnfr_msg.vnfd
         self._state = VirtualNetworkFunctionRecordState.INIT
         self._state_failed_reason = None
         self._ext_vlrs = {}  # The list of external virtual links
@@ -1095,6 +1095,8 @@ class VirtualNetworkFunctionRecord(object):
         self._vnf_mon = None
         self._config_status = vnfr_msg.config_status
         self._vnfd_package_store = rift.package.store.VnfdPackageFilesystemStore(self._log)
+        self._rw_vnfd = None
+        self._vnfd_ref_count = 0
 
     def _get_vdur_from_vdu_id(self, vdu_id):
         self._log.debug("Finding vdur for vdu_id %s", vdu_id)
@@ -1120,11 +1122,36 @@ class VirtualNetworkFunctionRecord(object):
                          "FAILED": "failed", }
         return op_status_map[self._state.name]
 
-    @property
-    def vnfd_xpath(self):
+    @staticmethod
+    def vnfd_xpath(vnfd_id):
         """ VNFD xpath associated with this VNFR """
-        return("C,/vnfd:vnfd-catalog/"
-               "vnfd:vnfd[vnfd:id = '{}']".format(self._vnfd_id))
+        return "C,/vnfd:vnfd-catalog/vnfd:vnfd[vnfd:id = '{}']".format(vnfd_id)
+
+    @property
+    def vnfd_ref_count(self):
+        """ Returns the VNFD reference count associated with this VNFR """
+        return self._vnfd_ref_count
+
+    def vnfd_in_use(self):
+        """ Returns whether vnfd is in use or not """
+        return True if self._vnfd_ref_count > 0 else False
+
+    def vnfd_ref(self):
+        """ Take a reference on this object """
+        self._vnfd_ref_count += 1
+        return self._vnfd_ref_count
+
+    def vnfd_unref(self):
+        """ Release reference on this object """
+        if self._vnfd_ref_count < 1:
+            msg = ("Unref on a VNFD object - vnfd id %s, vnfd_ref_count = %s" %
+                   (self.vnfd.id, self._vnfd_ref_count))
+            self._log.critical(msg)
+            raise VnfRecordError(msg)
+        self._log.debug("Releasing ref on VNFD %s - curr vnfd_ref_count:%s",
+                        self.vnfd.id, self._vnfd_ref_count)
+        self._vnfd_ref_count -= 1
+        return self._vnfd_ref_count
 
     @property
     def vnfd(self):
@@ -1206,7 +1233,7 @@ class VirtualNetworkFunctionRecord(object):
 
     def mgmt_intf_info(self):
         """ Get Management interface info for this VNFR """
-        mgmt_intf_desc = self.vnfd.msg.mgmt_interface
+        mgmt_intf_desc = self.vnfd.mgmt_interface
         ip_addr = None
         if mgmt_intf_desc.has_field("cp"):
             ip_addr = self.cp_ip_addr(mgmt_intf_desc.cp)
@@ -1227,7 +1254,7 @@ class VirtualNetworkFunctionRecord(object):
     def msg(self):
         """ Message associated with this VNFR """
         vnfd_fields = ["short_name", "vendor", "description", "version"]
-        vnfd_copy_dict = {k: v for k, v in self.vnfd.msg.as_dict().items() if k in vnfd_fields}
+        vnfd_copy_dict = {k: v for k, v in self.vnfd.as_dict().items() if k in vnfd_fields}
 
         mgmt_intf = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_MgmtInterface()
         ip_address, port = self.mgmt_intf_info()
@@ -1241,7 +1268,6 @@ class VirtualNetworkFunctionRecord(object):
                      "nsr_id_ref": self._vnfr_msg.nsr_id_ref,
                      "name": self.name,
                      "member_vnf_index_ref": self.member_vnf_index,
-                     "vnfd_ref": self.vnfd_id,
                      "operational_status": self.operational_status,
                      "operational_status_details": self._state_failed_reason,
                      "cloud_account": self.cloud_account_name,
@@ -1251,6 +1277,9 @@ class VirtualNetworkFunctionRecord(object):
         vnfr_dict.update(vnfd_copy_dict)
 
         vnfr_msg = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict(vnfr_dict)
+        vnfr_msg.vnfd = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_Vnfd.from_dict(self.vnfd.as_dict())
+
+        vnfr_msg.create_time = self._create_time
         vnfr_msg.uptime = int(time.time()) - self._create_time
         vnfr_msg.mgmt_interface = mgmt_intf
 
@@ -1265,7 +1294,7 @@ class VirtualNetworkFunctionRecord(object):
                 vdur = vnfr_msg.vdur.add()
                 vdur.from_dict(vdu.msg.as_dict())
 
-        if self.vnfd.msg.mgmt_interface.has_field('dashboard_params'):
+        if self.vnfd.mgmt_interface.has_field('dashboard_params'):
             vnfr_msg.dashboard_url = self.dashboard_url
 
         for cpr in self._cprs:
@@ -1295,18 +1324,18 @@ class VirtualNetworkFunctionRecord(object):
         ip, cfg_port = self.mgmt_intf_info()
         protocol = 'http'
         http_port = 80
-        if self.vnfd.msg.mgmt_interface.dashboard_params.has_field('https'):
-            if self.vnfd.msg.mgmt_interface.dashboard_params.https is True:
+        if self.vnfd.mgmt_interface.dashboard_params.has_field('https'):
+            if self.vnfd.mgmt_interface.dashboard_params.https is True:
                 protocol = 'https'
                 http_port = 443
-        if self.vnfd.msg.mgmt_interface.dashboard_params.has_field('port'):
-            http_port = self.vnfd.msg.mgmt_interface.dashboard_params.port
+        if self.vnfd.mgmt_interface.dashboard_params.has_field('port'):
+            http_port = self.vnfd.mgmt_interface.dashboard_params.port
 
         url = "{protocol}://{ip_address}:{port}/{path}".format(
                 protocol=protocol,
                 ip_address=ip,
                 port=http_port,
-                path=self.vnfd.msg.mgmt_interface.dashboard_params.path.lstrip("/"),
+                path=self.vnfd.mgmt_interface.dashboard_params.path.lstrip("/"),
                 )
 
         return url
@@ -1333,7 +1362,7 @@ class VirtualNetworkFunctionRecord(object):
         """ Publish The VLs associated with this VNF """
         self._log.debug("Publishing Internal Virtual Links for vnfd id: %s",
                         self.vnfd_id)
-        for ivld_msg in self.vnfd.msg.internal_vld:
+        for ivld_msg in self.vnfd.internal_vld:
             self._log.debug("Creating internal vld:"
                             " %s, int_cp_ref = %s",
                             ivld_msg, ivld_msg.internal_connection_point
@@ -1404,7 +1433,7 @@ class VirtualNetworkFunctionRecord(object):
         nsr_config = yield from self.get_nsr_config()
 
         ### Step-3: Get VDU level placement groups
-        for group in self.vnfd.msg.placement_groups:
+        for group in self.vnfd.placement_groups:
             for member_vdu in group.member_vdus:
                 if member_vdu.member_vdu_ref == vdu.id:
                     group_info = self.resolve_placement_group_cloud_construct(group,
@@ -1446,7 +1475,7 @@ class VirtualNetworkFunctionRecord(object):
 
 
         self._log.info("Creating VDU's for vnfd id: %s", self.vnfd_id)
-        for vdu in self.vnfd.msg.vdu:
+        for vdu in self._rw_vnfd.vdu:
             self._log.debug("Creating vdu: %s", vdu)
             vdur_id = get_vdur_id(vdu)
 
@@ -1602,7 +1631,7 @@ class VirtualNetworkFunctionRecord(object):
 
     def has_mgmt_interface(self, vdu):
         # ## TODO: Support additional mgmt_interface type options
-        if self.vnfd.msg.mgmt_interface.vdu_id == vdu.id:
+        if self.vnfd.mgmt_interface.vdu_id == vdu.id:
             return True
         return False
 
@@ -1621,7 +1650,7 @@ class VirtualNetworkFunctionRecord(object):
         """ Publish the inventory associated with this VNF """
         self._log.debug("Publishing inventory for VNFR id: %s", self._vnfr_id)
 
-        for component in self.vnfd.msg.component:
+        for component in self._rw_vnfd.component:
             self._log.debug("Creating inventory component %s", component)
             mangled_name = VcsComponent.mangle_name(component.component_name,
                                                     self.vnf_name,
@@ -1699,6 +1728,7 @@ class VirtualNetworkFunctionRecord(object):
     def instantiate(self, xact, restart_mode=False):
         """ instantiate this VNF """
         self.set_state(VirtualNetworkFunctionRecordState.VL_INIT_PHASE)
+        self._rw_vnfd = yield from self._vnfm.fetch_vnfd(self._vnfd_id)
 
         @asyncio.coroutine
         def fetch_vlrs():
@@ -1733,12 +1763,10 @@ class VirtualNetworkFunctionRecord(object):
                     cpr.vlr_ref = cp.vlr_ref
                     self._log.debug("Fetched VLR [%s] with path = [%s]", d, vlr_path)
 
-        # Fetch the VNFD associated with the VNFR
-        self._log.debug("VNFR-ID %s: Fetching vnfds", self._vnfr_id)
-        self._vnfd = yield from self._vnfm.get_vnfd_ref(self._vnfd_id)
-        self._log.debug("VNFR-ID %s: Fetched vnfd:%s", self._vnfr_id, self._vnfd)
+        # Increase the VNFD reference count
+        self.vnfd_ref()
 
-        assert self.vnfd is not None
+        assert self.vnfd
 
         # Fetch External VLRs
         self._log.debug("VNFR-ID %s: Fetching vlrs", self._vnfr_id)
@@ -1867,13 +1895,6 @@ class VnfdDtsHandler(object):
                             xact, action, scratch)
 
             is_recovery = xact.xact is None and action == rwdts.AppconfAction.INSTALL
-            # Create/Update a VNFD record
-            for cfg in self._regh.get_xact_elements(xact):
-                # Only interested in those VNFD cfgs whose ID was received in prepare callback
-                if cfg.id in scratch.get('vnfds', []) or is_recovery:
-                    self._vnfm.update_vnfd(cfg)
-
-            scratch.pop('vnfds', None)
 
         @asyncio.coroutine
         def on_prepare(dts, acg, xact, xact_info, ks_path, msg, scratch):
@@ -1883,7 +1904,7 @@ class VnfdDtsHandler(object):
             fref = ProtobufC.FieldReference.alloc()
             fref.goto_whole_message(msg.to_pbcm())
 
-            # Handle deletes in prepare_callback, but adds/updates in apply_callback
+            # Handle deletes in prepare_callback
             if fref.is_field_deleted():
                 # Delete an VNFD record
                 self._log.debug("Deleting VNFD with id %s", msg.id)
@@ -1893,17 +1914,6 @@ class VnfdDtsHandler(object):
                     raise VirtualNetworkFunctionDescriptorRefCountExists(err)
                 # Delete a VNFD record
                 yield from self._vnfm.delete_vnfd(msg.id)
-            else:
-                # Handle actual adds/updates in apply_callback,
-                # just check if VNFD in use in prepare_callback
-                if self._vnfm.vnfd_in_use(msg.id):
-                    self._log.debug("Cannot modify an VNFD in use - %s", msg)
-                    err = "Cannot modify an VNFD in use - %s" % msg
-                    raise VirtualNetworkFunctionDescriptorRefCountExists(err)
-
-                # Add this VNFD to scratch to create/update in apply callback
-                vnfds = scratch.setdefault('vnfds', [])
-                vnfds.append(msg.id)
 
             xact_info.respond_xpath(rwdts.XactRspCode.ACK)
 
@@ -2110,8 +2120,8 @@ class VnfrDtsHandler(object):
                 )
 
             if action == rwdts.QueryAction.CREATE:
-                if not msg.has_field("vnfd_ref"):
-                    err = "Vnfd reference not provided"
+                if not msg.has_field("vnfd"):
+                    err = "Vnfd not provided"
                     self._log.error(err)
                     raise VnfRecordError(err)
 
@@ -2138,7 +2148,7 @@ class VnfrDtsHandler(object):
                 try:
                     yield from vnfr.terminate(xact_info.xact)
                     # Unref the VNFD
-                    vnfr.vnfd.unref()
+                    vnfr.vnfd_unref()
                     yield from self._vnfm.delete_vnfr(xact_info.xact, vnfr)
                 except Exception as e:
                     self._log.exception(e)
@@ -2218,100 +2228,6 @@ class VnfrDtsHandler(object):
         self._log.debug("Deleting VNFR xact = %s, %s", xact, path)
         self.regh.delete_element(path)
         self._log.debug("Deleted VNFR xact = %s, %s", xact, path)
-
-
-class VirtualNetworkFunctionDescriptor(object):
-    """
-    Virtual Network Function descriptor class
-    """
-
-    def __init__(self, dts, log, loop, vnfm, vnfd):
-        self._dts = dts
-        self._log = log
-        self._loop = loop
-
-        self._vnfm = vnfm
-        self._vnfd = vnfd
-        self._ref_count = 0
-
-    @property
-    def ref_count(self):
-        """ Returns the reference count associated with
-            this Virtual Network Function Descriptor"""
-        return self._ref_count
-
-    @property
-    def id(self):
-        """ Returns vnfd id """
-        return self._vnfd.id
-
-    @property
-    def name(self):
-        """ Returns vnfd name """
-        return self._vnfd.name
-
-    def in_use(self):
-        """ Returns whether vnfd is in use or not """
-        return True if self._ref_count > 0 else False
-
-    def ref(self):
-        """ Take a reference on this object """
-        self._ref_count += 1
-        return self._ref_count
-
-    def unref(self):
-        """ Release reference on this object """
-        if self.ref_count < 1:
-            msg = ("Unref on a VNFD object - vnfd id %s, ref_count = %s" %
-                   (self.id, self._ref_count))
-            self._log.critical(msg)
-            raise VnfRecordError(msg)
-        self._log.debug("Releasing ref on VNFD %s - curr ref_count:%s",
-                        self.id, self.ref_count)
-        self._ref_count -= 1
-        return self._ref_count
-
-    @property
-    def msg(self):
-        """ Return the message associated with this NetworkServiceDescriptor"""
-        return self._vnfd
-
-    @staticmethod
-    def path_for_id(vnfd_id):
-        """ Return path for the passed vnfd_id"""
-        return "C,/vnfd:vnfd-catalog/vnfd:vnfd[vnfd:id = '{}']".format(vnfd_id)
-
-    def path(self):
-        """ Return the path associated with this NetworkServiceDescriptor"""
-        return VirtualNetworkFunctionDescriptor.path_for_id(self.id)
-
-    def update(self, vnfd):
-        """ Update the Virtual Network Function Descriptor """
-        if self.in_use():
-            self._log.error("Cannot update descriptor %s in use refcnt=%d",
-                            self.id, self.ref_count)
-
-            # The following loop is  added to debug RIFT-13284
-            for vnf_rec in self._vnfm._vnfrs.values():
-                if vnf_rec.vnfd_id == self.id:
-                    self._log.error("descriptor %s in used by %s:%s",
-                                    self.id, vnf_rec.vnfr_id, vnf_rec.msg)
-            raise VirtualNetworkFunctionDescriptorRefCountExists("Cannot update descriptor in use %s" % self.id)
-        self._vnfd = vnfd
-
-    def delete(self):
-        """ Delete the Virtual Network Function Descriptor """
-        if self.in_use():
-            self._log.error("Cannot delete descriptor %s in use refcnt=%d",
-                            self.id)
-
-            # The following loop is  added to debug RIFT-13284
-            for vnf_rec in self._vnfm._vnfrs.values():
-                if vnf_rec.vnfd_id == self.id:
-                    self._log.error("descriptor %s in used by %s:%s",
-                                    self.id, vnf_rec.vnfr_id, vnf_rec.msg)
-            raise VirtualNetworkFunctionDescriptorRefCountExists("Cannot delete descriptor in use %s" % self.id)
-        self._vnfm.delete_vnfd(self.id)
 
 
 class VnfdRefCountDtsHandler(object):
@@ -2505,10 +2421,12 @@ class VnfManager(object):
         self._nsr_handler = mano_dts.NsInstanceConfigSubscriber(log, dts, loop, callback=self.handle_nsr)
 
         self._dts_handlers = [VnfdDtsHandler(dts, log, loop, self),
+                              self._vnfr_handler,
                               self._vcs_handler,
+                              self._vnfr_ref_handler,
                               self._nsr_handler]
         self._vnfrs = {}
-        self._vnfds = {}
+        self._vnfds_to_vnfr = {}
         self._nsrs = {}
 
     @property
@@ -2544,7 +2462,7 @@ class VnfManager(object):
         """For the given VNFR get the related mgmt network from the NSD, if
         available.
         """
-        vnfd_id = vnfr.vnfd_ref
+        vnfd_id = vnfr.vnfd.id
         nsr_id = vnfr.nsr_id_ref
 
         # for the given related VNFR, get the corresponding NSR-config
@@ -2579,7 +2497,7 @@ class VnfManager(object):
 
         self._log.info("Create VirtualNetworkFunctionRecord %s from vnfd_id: %s",
                        vnfr.id,
-                       vnfr.vnfd_ref)
+                       vnfr.vnfd.id)
 
         mgmt_network = self.get_linked_mgmt_network(vnfr)
 
@@ -2587,6 +2505,7 @@ class VnfManager(object):
             self._dts, self._log, self._loop, self._cluster_name, self, self.vcs_handler, vnfr,
             mgmt_network=mgmt_network
             )
+        self._vnfds_to_vnfr[vnfr.vnfd.id] = self._vnfrs[vnfr.id]
         return self._vnfrs[vnfr.id]
 
     @asyncio.coroutine
@@ -2600,7 +2519,7 @@ class VnfManager(object):
     @asyncio.coroutine
     def fetch_vnfd(self, vnfd_id):
         """ Fetch VNFDs based with the vnfd id"""
-        vnfd_path = VirtualNetworkFunctionDescriptor.path_for_id(vnfd_id)
+        vnfd_path = VirtualNetworkFunctionRecord.vnfd_xpath(vnfd_id)
         self._log.debug("Fetch vnfd with path %s", vnfd_path)
         vnfd = None
 
@@ -2619,39 +2538,11 @@ class VnfManager(object):
 
         return vnfd
 
-    @asyncio.coroutine
-    def get_vnfd_ref(self, vnfd_id):
-        """ Get Virtual Network Function descriptor for the passed vnfd_id"""
-        vnfd = yield from self.get_vnfd(vnfd_id)
-        vnfd.ref()
-        return vnfd
-
-    @asyncio.coroutine
-    def get_vnfd(self, vnfd_id):
-        """ Get Virtual Network Function descriptor for the passed vnfd_id"""
-        vnfd = None
-        if vnfd_id not in self._vnfds:
-            self._log.error("Cannot find VNFD id:%s", vnfd_id)
-            vnfd = yield from self.fetch_vnfd(vnfd_id)
-
-            if vnfd is None:
-                self._log.error("Cannot find VNFD id:%s", vnfd_id)
-                raise VirtualNetworkFunctionDescriptorError("Cannot find VNFD id:%s", vnfd_id)
-
-            if vnfd.id != vnfd_id:
-                self._log.error("Bad Recovery state {} found for {}".format(vnfd.id, vnfd_id))
-                raise VirtualNetworkFunctionDescriptorError("Bad Recovery state {} found for {}".format(vnfd.id, vnfd_id))
-
-            if vnfd.id not in self._vnfds:
-                self.create_vnfd(vnfd)
-
-        return self._vnfds[vnfd_id]
-
     def vnfd_in_use(self, vnfd_id):
         """ Is this VNFD in use """
         self._log.debug("Is this VNFD in use - msg:%s", vnfd_id)
-        if vnfd_id in self._vnfds:
-            return self._vnfds[vnfd_id].in_use()
+        if vnfd_id in self._vnfds_to_vnfr:
+            return self._vnfds_to_vnfr[vnfd_id].in_use()
         return False
 
     @asyncio.coroutine
@@ -2661,47 +2552,22 @@ class VnfManager(object):
                         path, msg)
         yield from self.vnfr_handler.update(xact, path, msg)
 
-    def create_vnfd(self, vnfd):
-        """ Create a virtual network function descriptor """
-        self._log.debug("Create virtual networkfunction descriptor - %s", vnfd)
-        if vnfd.id in self._vnfds:
-            self._log.error("Cannot create VNFD %s -VNFD id already exists", vnfd)
-            raise VirtualNetworkFunctionDescriptorError("VNFD already exists-%s", vnfd.id)
-
-        self._vnfds[vnfd.id] = VirtualNetworkFunctionDescriptor(self._dts,
-                                                                self._log,
-                                                                self._loop,
-                                                                self,
-                                                                vnfd)
-        return self._vnfds[vnfd.id]
-
-    def update_vnfd(self, vnfd):
-        """ update the Virtual Network Function descriptor """
-        self._log.debug("Update virtual network function descriptor - %s", vnfd)
-
-        if vnfd.id not in self._vnfds:
-            self._log.debug("No VNFD found - creating VNFD id = %s", vnfd.id)
-            self.create_vnfd(vnfd)
-        else:
-            self._log.debug("Updating VNFD id = %s, vnfd = %s", vnfd.id, vnfd)
-            self._vnfds[vnfd.id].update(vnfd)
-
     @asyncio.coroutine
     def delete_vnfd(self, vnfd_id):
         """ Delete the Virtual Network Function descriptor with the passed id """
         self._log.debug("Deleting the virtual network function descriptor - %s", vnfd_id)
-        if vnfd_id not in self._vnfds:
+        if vnfd_id not in self._vnfds_to_vnfr:
             self._log.debug("Delete VNFD failed - cannot find vnfd-id %s", vnfd_id)
             raise VirtualNetworkFunctionDescriptorNotFound("Cannot find %s", vnfd_id)
 
-        if self._vnfds[vnfd_id].in_use():
+        if self._vnfds_to_vnfr[vnfd_id].in_use():
             self._log.debug("Cannot delete VNFD id %s reference exists %s",
                             vnfd_id,
-                            self._vnfds[vnfd_id].ref_count)
+                            self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
             raise VirtualNetworkFunctionDescriptorRefCountExists(
                 "Cannot delete :%s, ref_count:%s",
                 vnfd_id,
-                self._vnfds[vnfd_id].ref_count)
+                self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
 
         # Remove any files uploaded with VNFD and stored under $RIFT_ARTIFACTS/libs/<id>
         try:
@@ -2711,10 +2577,10 @@ class VnfManager(object):
                 shutil.rmtree(vnfd_dir, ignore_errors=True)
         except Exception as e:
             self._log.error("Exception in cleaning up VNFD {}: {}".
-                            format(self._vnfds[vnfd_id].name, e))
+                            format(self._vnfds_to_vnfr[vnfd_id].vnfd.name, e))
             self._log.exception(e)
 
-        del self._vnfds[vnfd_id]
+        del self._vnfds_to_vnfr[vnfd_id]
 
     def vnfd_refcount_xpath(self, vnfd_id):
         """ xpath for ref count entry """
@@ -2726,14 +2592,15 @@ class VnfManager(object):
         """ Get the vnfd_list from this VNFM"""
         vnfd_list = []
         if vnfd_id is None or vnfd_id == "":
-            for vnfd in self._vnfds.values():
+            for vnfr in self._vnfds_to_vnfr.values():
                 vnfd_msg = RwVnfrYang.YangData_Vnfr_VnfrCatalog_VnfdRefCount()
-                vnfd_msg.vnfd_id_ref = vnfd.id
-                vnfd_msg.instance_ref_count = vnfd.ref_count
-                vnfd_list.append((self.vnfd_refcount_xpath(vnfd.id), vnfd_msg))
-        elif vnfd_id in self._vnfds:
-                vnfd_msg.vnfd_id_ref = self._vnfds[vnfd_id].id
-                vnfd_msg.instance_ref_count = self._vnfds[vnfd_id].ref_count
+                vnfd_msg.vnfd_id_ref = vnfr.vnfd.id
+                vnfd_msg.instance_ref_count = vnfr.vnfd_ref_count
+                vnfd_list.append((self.vnfd_refcount_xpath(vnfr.vnfd.id), vnfd_msg))
+        elif vnfd_id in self._vnfds_to_vnfr:
+                vnfd_msg = RwVnfrYang.YangData_Vnfr_VnfrCatalog_VnfdRefCount()
+                vnfd_msg.vnfd_id_ref = self._vnfds_to_vnfr[vnfd_id].vnfd.id
+                vnfd_msg.instance_ref_count = self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count
                 vnfd_list.append((self.vnfd_refcount_xpath(vnfd_id), vnfd_msg))
 
         return vnfd_list

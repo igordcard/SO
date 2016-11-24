@@ -37,7 +37,8 @@ from gi.repository import (
         RwLaunchpadYang as launchpadyang,
         RwVnfrYang,
         RwVnfdYang,
-        RwNsdYang
+        RwNsdYang,
+        VnfrYang
         )
 
 
@@ -97,10 +98,9 @@ class MockStore():
 
         store.get_vnfd = mock.MagicMock(return_value=mock_vnfd)
 
-        mock_vnfr = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict({
-            'id': '1',
-            'vnfd_ref': '1',
-            })
+        mock_vnfr = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict({'id': '1'})
+        mock_vnfr.vnfd = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_Vnfd.from_dict({'id': '1'})
+
         store.get_vnfr = mock.MagicMock(return_value=mock_vnfr)
 
         mock_nsr = RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr.from_dict({

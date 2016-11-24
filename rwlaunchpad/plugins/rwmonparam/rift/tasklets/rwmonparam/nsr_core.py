@@ -89,7 +89,7 @@ class NsrMonitoringParam():
         # This indicates that the NSD had no mon-param config.
         if not nsd.monitoring_param:
             for vnfr in constituent_vnfrs:
-                vnfd = store.get_vnfd(vnfr.vnfd_ref)
+                vnfd = store.get_vnfd(vnfr.vnfd.id)
                 for monp in vnfd.monitoring_param:
                     mon_params.append(NsrMonitoringParam(
                         monp,
@@ -193,7 +193,7 @@ class NsrMonitoringParam():
 
     def _convert_nsd_msg(self, nsd_monp):
         """Create initial msg without values"""
-        vnfd_to_vnfr = {vnfr.vnfd_ref: vnfr_id
+        vnfd_to_vnfr = {vnfr.vnfd.id: vnfr_id
                 for vnfr_id, vnfr in self._constituent_vnfr_map.items()}
 
         # First, convert the monp param ref from vnfd to vnfr terms.

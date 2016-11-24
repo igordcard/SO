@@ -115,14 +115,7 @@ module vnfd
     }
   }
 
-  container vnfd-catalog {
-
-    description
-        "Virtual Network Function Descriptor (VNFD).";
-
-    list vnfd {
-      key "id";
-
+  grouping vnfd-descriptor {
       leaf id {
         description "Identifier for the VNFD.";
         type string;
@@ -490,7 +483,7 @@ module vnfd
 
         key "name";
         uses manotypes:placement-group-info;
-        
+
         list member-vdus {
 
           description
@@ -504,7 +497,17 @@ module vnfd
           }
         }
       }
-    }
+  }
+
+  container vnfd-catalog {
+    description
+        "Virtual Network Function Descriptor (VNFD).";
+
+    list vnfd {
+      key "id";
+
+      uses vnfd-descriptor;
+     }
   }
 }
 

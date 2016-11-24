@@ -78,7 +78,7 @@ def yield_vnfd_vnfr_pairs(proxy, nsr=None):
             if vnfr.id not in const_vnfr_ids:
                 continue
 
-        vnfd = get_vnfd(vnfr.vnfd_ref)
+        vnfd = get_vnfd(vnfr.vnfd.id)
         yield vnfd, vnfr
 
 

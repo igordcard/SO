@@ -182,7 +182,7 @@ class JujuConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         try:
             path = os.path.join(self._rift_artif_dir,
                                 'launchpad/libs',
-                                agent_vnfr.vnfr_msg.vnfd_ref,
+                                agent_vnfr.vnfr_msg.vnfd.id,
                                 'charms/trusty',
                                 charm)
             self._log.debug("jujuCA: Charm dir is {}".format(path))

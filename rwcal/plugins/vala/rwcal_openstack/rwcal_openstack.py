@@ -2010,7 +2010,10 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             The vdu_id
         """
         ### First create required number of ports aka connection points
+        # Add the mgmt_ntwk by default.
+        mgmt_network_id = None
         with self._use_driver(account) as drv:
+            mgmt_network_id = drv._mgmt_network_id
             ### If floating_ip is required and we don't have one, better fail before any further allocation
             if vdu_init.has_field('allocate_public_address') and vdu_init.allocate_public_address:
                 if account.openstack.has_field('floating_ip_pool'):
@@ -2024,7 +2027,12 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         port_list = []
         network_list = []
         imageinfo_list = []
+        is_explicit_mgmt_defined = False
         for c_point in vdu_init.connection_points:
+            # if the user has specified explicit mgmt_network connection point
+            # then remove the mgmt_network from the VM list
+            if c_point.virtual_link_id == mgmt_network_id:
+                is_explicit_mgmt_defined = True
             if c_point.virtual_link_id in network_list:
                 assert False, "Only one port per network supported. Refer: http://specs.openstack.org/openstack/nova-specs/specs/juno/implemented/nfv-multiple-if-1-net.html"
             else:
@@ -2086,7 +2094,8 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         with self._use_driver(account) as drv:
             ### Now Create VM
             vm_network_list = []
-            vm_network_list.append(drv._mgmt_network_id)
+            if not is_explicit_mgmt_defined:
+                vm_network_list.append(drv._mgmt_network_id)
   
             if vdu_init.has_field('volumes'):
                   # Only combination supported: Image->Volume
@@ -2261,9 +2270,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             Object of type RwcalYang.VDUInfoParams
         """
         with self._use_driver(account) as drv:
-
-            ### Get list of ports excluding the one for management network
-            port_list = [p for p in drv.neutron_port_list(**{'device_id': vdu_id}) if p['network_id'] != drv.get_mgmt_network_id()]
+            port_list = drv.neutron_port_list(**{'device_id': vdu_id})
 
             vm = drv.nova_server_get(vdu_id)
 
@@ -2309,8 +2316,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         with self._use_driver(account) as drv:
             vms = drv.nova_server_list()
             for vm in vms:
-                ### Get list of ports excluding one for management network
-                port_list = [p for p in drv.neutron_port_list(**{'device_id': vm['id']}) if p['network_id'] != drv.get_mgmt_network_id()]
+                port_list = drv.neutron_port_list(**{'device_id': vm['id']})
 
                 flavor_info = None
 

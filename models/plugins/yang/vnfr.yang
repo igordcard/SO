@@ -207,11 +207,9 @@ module vnfr
         type uint32;
       }
 
-      leaf vnfd-ref {
-        description "Reference to VNFD";
-        type leafref {
-          path "/vnfd:vnfd-catalog/vnfd:vnfd/vnfd:id";
-        }
+      container vnfd {
+        description "VNF descriptor used to instantiate this VNF";
+        uses vnfd:vnfd-descriptor;
       }
 
       // Use parameters provided here to configure this VNF
@@ -296,9 +294,7 @@ module vnfr
 
         leaf vdu-id-ref {
           type leafref {
-            path "/vnfd:vnfd-catalog/vnfd:vnfd" 
-               + "[vnfd:id = current()/../../vnfr:vnfd-ref]"
-               + "/vnfd:vdu/vnfd:id";
+            path "../../vnfd/vdu/id";
           }
         }
 

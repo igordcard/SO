@@ -952,7 +952,6 @@ class VirtualNetworkFunctionRecord(object):
         vnfr_dict = {
                 "id": self.id,
                 "nsr_id_ref": self._nsr_id,
-                "vnfd_ref": self.vnfd.id,
                 "name": self.name,
                 "cloud_account": self._cloud_account_name,
                 "om_datacenter": self._om_datacenter_name,
@@ -961,6 +960,8 @@ class VirtualNetworkFunctionRecord(object):
         vnfr_dict.update(vnfd_copy_dict)
 
         vnfr = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict(vnfr_dict)
+
+        vnfr.vnfd = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_Vnfd.from_dict(self.vnfd.as_dict())
         vnfr.member_vnf_index_ref = self.member_vnf_index
         vnfr.vnf_configuration.from_dict(self._vnfd.vnf_configuration.as_dict())
 
@@ -1084,7 +1085,7 @@ class VirtualNetworkFunctionRecord(object):
             cpr.vlr_ref = vlr_ref.id
             self.vnfr_msg.connection_point.append(cpr)
             self._log.debug("Connection point [%s] added, vnf id=%s vnfd id=%s",
-                            cpr, self.vnfr_msg.id, self.vnfr_msg.vnfd_ref)
+                            cpr, self.vnfr_msg.id, self.vnfr_msg.vnfd.id)
 
         if not self.restart_mode:
             yield from self._dts.query_create(self.xpath,
