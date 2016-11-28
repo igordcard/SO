@@ -153,7 +153,7 @@ class VnfrConsoleOperdataDtsHandler(object):
 
 
 class OpenmanoVnfr(object):
-    def __init__(self, log, loop, cli_api, vnfr):
+    def __init__(self, log, loop, cli_api, vnfr, nsd):
         self._log = log
         self._loop = loop
         self._cli_api = cli_api
@@ -163,6 +163,8 @@ class OpenmanoVnfr(object):
         self._vnf_id = None
 
         self._created = False
+
+        self.nsd = nsd
 
     @property
     def vnfd(self):
@@ -183,7 +185,7 @@ class OpenmanoVnfr(object):
     @property
     def openmano_vnfd(self):
         self._log.debug("Converting vnfd %s from rift to openmano", self.vnfd.id)
-        openmano_vnfd = rift2openmano.rift2openmano_vnfd(self.vnfd)
+        openmano_vnfd = rift2openmano.rift2openmano_vnfd(self.vnfd, self.nsd)
         return openmano_vnfd
 
     @property
@@ -430,7 +432,7 @@ class OpenmanoNsr(object):
 
     @asyncio.coroutine
     def add_vnfr(self, vnfr):
-        vnfr = OpenmanoVnfr(self._log, self._loop, self._cli_api, vnfr)
+        vnfr = OpenmanoVnfr(self._log, self._loop, self._cli_api, vnfr, nsd=self.nsd)
         yield from vnfr.create()
         self._vnfrs.append(vnfr)
 

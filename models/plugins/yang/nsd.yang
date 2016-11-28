@@ -326,6 +326,12 @@ module nsd
       // replicate for pnfd container here
       uses manotypes:provider-network;
 
+      leaf mgmt-network {
+         description "Flag indicating whether this network is a VIM management network"; 
+         type boolean;
+         default false;
+      }
+
       choice init-params {
         description "Extra parameters for VLD instantiation";
 
@@ -337,12 +343,14 @@ module nsd
             type string;
           }
         }
+
         case vim-network-profile {
           leaf ip-profile-ref {
             description "Named reference to IP-profile object";
             type string;
           } 
-        }   
+        }
+
       }
     }
 

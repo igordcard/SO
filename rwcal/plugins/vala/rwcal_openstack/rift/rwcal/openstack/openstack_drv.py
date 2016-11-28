@@ -1647,6 +1647,7 @@ class OpenstackDriver(object):
             logger.error("Could not identity the version information for openstack service endpoints. Auth_URL should contain \"/v2\" or \"/v3\" string in it")
             raise NotImplementedError("Auth URL is wrong or invalid. Only Keystone v2 & v3 supported")
 
+        self._mgmt_network_id = None
         if mgmt_network != None:
             self._mgmt_network = mgmt_network
 

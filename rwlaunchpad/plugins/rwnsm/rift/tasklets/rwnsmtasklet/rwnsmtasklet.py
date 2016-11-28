@@ -1904,6 +1904,7 @@ class NetworkServiceRecord(object):
         """ This function creates VLs for every VLD in the NSD
         associated with this NSR"""
         for vld in self.nsd_msg.vld:
+
             self._log.debug("Found vld %s in nsr id %s", vld, self.id)
             cloud_account_list = self._extract_cloud_accounts_for_vl(vld)
             for cloud_account,om_datacenter in cloud_account_list:
