@@ -333,7 +333,7 @@ def rift2openmano_nsd(rift_nsd, rift_vnfds,openmano_vnfd_ids):
     return openmano
 
 
-def rift2openmano_vnfd(rift_vnfd):
+def rift2openmano_vnfd(rift_vnfd, rift_nsd):
     openmano_vnf = {"vnf":{}}
     vnf = openmano_vnf["vnf"]
 
@@ -358,7 +358,23 @@ def rift2openmano_vnfd(rift_vnfd):
 
         raise ValueError("Internal connection point reference %s not found" % cp_ref_id)
 
-    def rift2openmano_if_type(rift_type):
+    def rift2openmano_if_type(ext_if):
+
+        cp_ref_name = ext_if.vnfd_connection_point_ref
+        for vld in rift_nsd.vlds:
+
+            # if it is an explicit mgmt_network then check if the given
+            # cp_ref is a part of it
+            if not vld.mgmt_network:
+                continue
+
+            for vld_cp in vld.vnfd_connection_point_ref:
+                if vld_cp.vnfd_connection_point_ref == cp_ref_name:
+                    return "mgmt"
+
+
+        rift_type = ext_if.virtual_interface.type_yang
+        # Retaining it for backward compatibility!
         if rift_type == "OM_MGMT":
             return "mgmt"
         elif rift_type == "VIRTIO" or rift_type == "E1000":
@@ -380,7 +396,7 @@ def rift2openmano_vnfd(rift_vnfd):
         vdu, ext_if = find_vdu_and_ext_if_by_cp_ref(cp.name)
         connection = {
             "name": cp.name,
-            "type": rift2openmano_if_type(ext_if.virtual_interface.type_yang),
+            "type": rift2openmano_if_type(ext_if),
             "VNFC": vdu.name,
             "local_iface_name": ext_if.name,
             "description": "%s iface on VDU %s" % (ext_if.name, vdu.name),

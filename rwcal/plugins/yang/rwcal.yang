@@ -975,6 +975,13 @@ module rwcal
       uses connection-point-type;
     }
 
+    leaf mgmt-network {
+      description 
+          "Explicit mgmt-network name, otherwise the mgmt-network from
+           Cloud account is used";
+      type string;
+    }
+
     leaf allocate-public-address {
       description "If this VDU needs public IP address";
       type boolean;

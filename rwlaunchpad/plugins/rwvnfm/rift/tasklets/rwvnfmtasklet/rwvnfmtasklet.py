@@ -49,6 +49,7 @@ from gi.repository import (
 import rift.tasklets
 import rift.package.store
 import rift.package.cloud_init
+import rift.mano.dts as mano_dts
 
 
 class VMResourceError(Exception):
@@ -270,6 +271,7 @@ class VirtualDeploymentUnitRecord(object):
                  vdud,
                  vnfr,
                  mgmt_intf,
+                 mgmt_network,
                  cloud_account_name,
                  vnfd_package_store,
                  vdur_id=None,
@@ -282,6 +284,7 @@ class VirtualDeploymentUnitRecord(object):
         self._mgmt_intf = mgmt_intf
         self._cloud_account_name = cloud_account_name
         self._vnfd_package_store = vnfd_package_store
+        self._mgmt_network = mgmt_network
 
         self._vdur_id = vdur_id or str(uuid.uuid4())
         self._int_intf = []
@@ -551,6 +554,9 @@ class VirtualDeploymentUnitRecord(object):
         self._log.debug("VDUD: %s", self._vdud)
         if config is not None:
             vm_create_msg_dict['vdu_init'] = {'userdata': config}
+
+        if self._mgmt_network:
+            vm_create_msg_dict['mgmt_network'] = self._mgmt_network
 
         cp_list = []
         for intf, cp, vlr in self._ext_intf:
@@ -1046,7 +1052,7 @@ class InternalVirtualLinkRecord(object):
 
 class VirtualNetworkFunctionRecord(object):
     """ Virtual Network Function Record """
-    def __init__(self, dts, log, loop, cluster_name, vnfm, vcs_handler, vnfr_msg):
+    def __init__(self, dts, log, loop, cluster_name, vnfm, vcs_handler, vnfr_msg, mgmt_network=None):
         self._dts = dts
         self._log = log
         self._loop = loop
@@ -1057,6 +1063,7 @@ class VirtualNetworkFunctionRecord(object):
         self._vnfm = vnfm
         self._vcs_handler = vcs_handler
         self._vnfr = vnfr_msg
+        self._mgmt_network = mgmt_network
 
         self._vnfd = None
         self._state = VirtualNetworkFunctionRecordState.INIT
@@ -1439,6 +1446,7 @@ class VirtualNetworkFunctionRecord(object):
                 vdud=vdu,
                 vnfr=vnfr,
                 mgmt_intf=self.has_mgmt_interface(vdu),
+                mgmt_network=self._mgmt_network,
                 cloud_account_name=self.cloud_account_name,
                 vnfd_package_store=self._vnfd_package_store,
                 vdur_id=vdur_id,
@@ -2458,13 +2466,15 @@ class VnfManager(object):
 
         self._vcs_handler = VcsComponentDtsHandler(dts, log, loop, self)
         self._vnfr_handler = VnfrDtsHandler(dts, log, loop, self)
+        self._vnfr_ref_handler = VnfdRefCountDtsHandler(dts, log, loop, self)
+        self._nsr_handler = mano_dts.NsInstanceConfigSubscriber(log, dts, loop, callback=self.handle_nsr)
 
         self._dts_handlers = [VnfdDtsHandler(dts, log, loop, self),
-                              self._vnfr_handler,
                               self._vcs_handler,
-                              VnfdRefCountDtsHandler(dts, log, loop, self)]
+                              self._nsr_handler]
         self._vnfrs = {}
         self._vnfds = {}
+        self._nsrs = {}
 
     @property
     def vnfr_handler(self):
@@ -2488,6 +2498,35 @@ class VnfManager(object):
         self._log.debug("Run VNFManager - registering static DTS handlers""")
         yield from self.register()
 
+    def handle_nsr(self, nsr, action):
+        if action in [rwdts.QueryAction.CREATE]:
+            self._nsrs[nsr.id] = nsr
+        elif action == rwdts.QueryAction.DELETE:
+            if nsr.id in self._nsrs:
+                del self._nsrs[nsr.id]
+
+    def get_linked_mgmt_network(self, vnfr):
+        """For the given VNFR get the related mgmt network from the NSD, if
+        available.
+        """
+        vnfd_id = vnfr.vnfd_ref
+        nsr_id = vnfr.nsr_id_ref
+
+        # for the given related VNFR, get the corresponding NSR-config
+        nsr_obj = None
+        try:
+            nsr_obj = self._nsrs[nsr_id]
+        except KeyError:
+            raise("Unable to find the NS with the ID: {}".format(nsr_id))
+
+        # for the related NSD check if a VLD exists such that it's a mgmt
+        # network
+        for vld in nsr_obj.nsd.vld:
+            if vld.mgmt_network:
+                return vld.name
+
+        return None
+
     def get_vnfr(self, vnfr_id):
         """ get VNFR by vnfr id """
 
@@ -2507,8 +2546,11 @@ class VnfManager(object):
                        vnfr.id,
                        vnfr.vnfd_ref)
 
+        mgmt_network = self.get_linked_mgmt_network(vnfr)
+
         self._vnfrs[vnfr.id] = VirtualNetworkFunctionRecord(
-            self._dts, self._log, self._loop, self._cluster_name, self, self.vcs_handler, vnfr
+            self._dts, self._log, self._loop, self._cluster_name, self, self.vcs_handler, vnfr,
+            mgmt_network=mgmt_network
             )
         return self._vnfrs[vnfr.id]
 

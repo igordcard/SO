@@ -183,6 +183,7 @@ class ResourceMgrCALHandler(object):
     def create_virtual_compute(self, req_params):
         #rc, rsp = self._rwcal.get_vdu_list(self._account)
         self._log.debug("Calling get_vdu_list API")
+
         rc, rsp = yield from self._loop.run_in_executor(self._executor,
                                                         self._rwcal.get_vdu_list,
                                                         self._account)
@@ -350,9 +351,10 @@ class ResourceMgrCALHandler(object):
 
 
 class Resource(object):
-    def __init__(self, resource_id, resource_type):
+    def __init__(self, resource_id, resource_type, request):
         self._id = resource_id
         self._type = resource_type
+        self._request = request
 
     @property
     def resource_id(self):
@@ -362,18 +364,20 @@ class Resource(object):
     def resource_type(self):
         return self._type
 
+    @property
+    def request(self):
+        return self._request
+
     def cleanup(self):
         pass
 
 
 class ComputeResource(Resource):
-    def __init__(self, resource_id, resource_type):
-        super(ComputeResource, self).__init__(resource_id, resource_type)
+    pass
 
 
 class NetworkResource(Resource):
-    def __init__(self, resource_id, resource_type):
-        super(NetworkResource, self).__init__(resource_id, resource_type)
+    pass
 
 
 class ResourcePoolInfo(object):
@@ -614,7 +618,7 @@ class NetworkPool(ResourcePool):
         if resource_id in self._all_resources:
             self._log.error("Resource with id %s name %s of type %s is already used", resource_id, request.name, resource_type)
             raise ResMgrNoResourcesAvailable("Resource with name %s of type network is already used" %(resource_id))
-        resource = self._resource_class(resource_id, resource_type)
+        resource = self._resource_class(resource_id, resource_type, request)
         self._all_resources[resource_id] = resource
         self._allocated_resources[resource_id] = resource
         self._log.info("Successfully allocated virtual-network resource from CAL with resource-id: %s", resource_id)
@@ -742,7 +746,7 @@ class ComputePool(ResourcePool):
     def allocate_dynamic_resource(self, request):
         #request.flavor_id = yield from self.select_resource_flavor(request)
         resource_id = yield from self._cal.create_virtual_compute(request)
-        resource = self._resource_class(resource_id, 'dynamic')
+        resource = self._resource_class(resource_id, 'dynamic', request)
         self._all_resources[resource_id] = resource
         self._allocated_resources[resource_id] = resource
         self._log.info("Successfully allocated virtual-compute resource from CAL with resource-id: %s", resource_id)
@@ -763,6 +767,7 @@ class ComputePool(ResourcePool):
     @asyncio.coroutine
     def get_resource_info(self, resource):
         info = yield from self._cal.get_virtual_compute_info(resource.resource_id)
+
         self._log.info("Successfully retrieved virtual-compute information from CAL with resource-id: %s. Info: %s",
                        resource.resource_id, str(info))
         response = RwResourceMgrYang.VDUEventData_ResourceInfo()
@@ -779,6 +784,19 @@ class ComputePool(ResourcePool):
         return info 
 
     def _get_resource_state(self, resource_info, requested_params):
+
+
+        def conn_pts_len_equal():
+            # if explicit mgmt network is defined then the allocated ports might
+            # one more than the expected.
+            allocated_ports = len(resource_info.connection_points)
+            requested_ports = len(requested_params.connection_points)
+
+            if not requested_params.mgmt_network:
+                allocated_ports -= 1
+
+            return allocated_ports == requested_ports
+
         if resource_info.state == 'failed':
             self._log.error("<Compute-Resource: %s> Reached failed state.",
                             resource_info.name)
@@ -800,8 +818,7 @@ class ComputePool(ResourcePool):
                                   resource_info.name, requested_params)
                 return 'pending'
 
-        if(len(requested_params.connection_points) != 
-           len(resource_info.connection_points)):
+        if not conn_pts_len_equal():
             self._log.warning("<Compute-Resource: %s> Waiting for requested number of ports to be assigned to virtual-compute, requested: %d, assigned: %d",
                               resource_info.name,
                               len(requested_params.connection_points),
@@ -1440,7 +1457,7 @@ class ResourceMgrCore(object):
             return r_info
 
         self._resource_table[event_id] = (r_id, cloud_account_name, resource.pool_name)
-        new_resource = pool._resource_class(r_id, 'dynamic')
+        new_resource = pool._resource_class(r_id, 'dynamic', request)
         if resource_type == 'compute':
             requested_params = RwcalYang.VDUInitParams()
             requested_params.from_dict(request.as_dict())
