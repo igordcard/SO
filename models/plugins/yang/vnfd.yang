@@ -342,26 +342,7 @@ module vnfd
           uses manotypes:alarm;
         }
 
-        leaf image {
-          description
-            "Image name for the software image.
-             If the image name is found within the VNF packaage it will
-             be uploaded to all cloud accounts during onboarding process.
-             Otherwise, the image must be added to the cloud account with
-             the same name as entered here.
-            ";
-          mandatory true;
-          type string;
-        }
-
-        leaf image-checksum {
-          description
-            "Image md5sum for the software image.
-            The md5sum, if provided, along with the image name uniquely
-            identifies an image uploaded to the CAL.
-            ";
-          type string;
-        }
+        uses manotypes:image-properties;
 
         choice cloud-init-input {
           description
@@ -447,6 +428,17 @@ module vnfd
           }
           uses virtual-interface;
         }
+
+        list volumes {
+          key "name";
+
+          leaf name {
+            description "Name of the disk-volumes, e.g. vda, vdb etc";
+            type string;
+          }
+
+          uses manotypes:volume-info;
+        } 
       }
 
       list vdu-dependency {

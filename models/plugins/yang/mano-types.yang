@@ -112,6 +112,28 @@ module mano-types
   }
   
 
+  grouping image-properties {
+    leaf image {
+      description
+            "Image name for the software image.
+             If the image name is found within the VNF packaage it will
+             be uploaded to all cloud accounts during onboarding process.
+             Otherwise, the image must be added to the cloud account with
+             the same name as entered here.
+            ";
+      type string;
+    }
+
+    leaf image-checksum {
+      description
+            "Image md5sum for the software image.
+            The md5sum, if provided, along with the image name uniquely
+            identifies an image uploaded to the CAL.
+            ";
+      type string;
+    } 
+  }
+
   grouping vnf-configuration {
     container vnf-configuration {
       rwpb:msg-new VnfConfiguration;
@@ -2002,5 +2024,79 @@ module mano-types
       uses ip-profile-info;
     }
   }
-  
+
+  grouping volume-info {
+    description "Grouping for Volume-info";
+
+    leaf description {
+      description "Description for Volume";
+      type string;
+    }
+
+    leaf size {
+      description "Size of disk in GB";
+      type uint64;
+    }
+
+    choice volume-source {
+      description
+            "Defines the source of the volume. Possible options are
+             1. Ephemeral -- Empty disk
+             2. Image     -- Refer to image to be used for volume
+             3. Volume    -- Reference of pre-existing volume to be used
+            ";
+
+      case ephemeral {
+        leaf ephemeral {
+          type empty;
+        }
+      }
+
+      case image {
+        uses image-properties;
+      }
+
+      case volume {
+        leaf volume-ref {
+          description "Reference for pre-existing volume in VIM";
+          type string;
+        }
+      }
+    }
+
+    container boot-params {
+      leaf boot-volume {
+        description "This flag indicates if this is boot volume or not";
+        type boolean;
+      }
+      leaf boot-priority {
+        description "Boot priority associated with volume";
+        type int32;
+      }
+    }
+
+    container guest-params {
+      description "Guest virtualization parameter associated with volume";
+
+      leaf device_bus {
+        description "Type of disk-bus on which this disk is exposed to guest";
+        type enumeration {
+          enum ide;
+          enum usb;
+          enum virtio;
+          enum scsi;
+        }
+      }
+
+      leaf device_type {
+        description "The type of device as exposed to guest";
+        type enumeration {
+          enum disk;
+          enum cdrom;
+          enum floppy;
+          enum lun;
+        }
+      }
+    }
+  }
 }

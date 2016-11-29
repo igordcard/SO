@@ -96,9 +96,9 @@ def prepare_vm_after_boot(drv,argument):
     ### Important to call create_port_metadata before assign_floating_ip_address
     ### since assign_floating_ip_address can wait thus delaying port_metadata creation
 
-    ### Wait for 2 minute for server to come up -- Needs fine tuning
-    wait_time = 120 
-    sleep_time = 1
+    ### Wait for a max of 5 minute for server to come up -- Needs fine tuning
+    wait_time = 300
+    sleep_time = 2
     for i in range(int(wait_time/sleep_time)):
         server = drv.nova_server_get(argument.server_id)
         if server['status'] == 'ACTIVE':

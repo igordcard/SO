@@ -196,8 +196,9 @@ class ResourceMgrCALHandler(object):
         params = RwcalYang.VDUInitParams()
         params.from_dict(req_params.as_dict())
 
-        image_checksum = req_params.image_checksum if req_params.has_field("image_checksum") else None
-        params.image_id = yield from self.get_image_id_from_image_info(req_params.image_name, image_checksum)
+        if 'image_name' in req_params:
+            image_checksum = req_params.image_checksum if req_params.has_field("image_checksum") else None
+            params.image_id = yield from self.get_image_id_from_image_info(req_params.image_name, image_checksum)
 
         #rc, rs = self._rwcal.create_vdu(self._account, params)
         self._log.debug("Calling create_vdu API with params %s" %(str(params)))

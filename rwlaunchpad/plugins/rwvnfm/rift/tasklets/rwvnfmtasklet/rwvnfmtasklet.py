@@ -340,6 +340,8 @@ class VirtualDeploymentUnitRecord(object):
     @property
     def image_name(self):
         """ name that should be used to lookup the image on the CMP """
+        if 'image' not in self._vdud:
+            return None
         return os.path.basename(self._vdud.image)
 
     @property
@@ -380,6 +382,7 @@ class VirtualDeploymentUnitRecord(object):
                       "vswitch_epa",
                       "hypervisor_epa",
                       "host_epa",
+                      "volumes",
                       "name"]
         vdu_copy_dict = {k: v for k, v in
                          self._vdud.as_dict().items() if k in vdu_fields}
@@ -390,9 +393,10 @@ class VirtualDeploymentUnitRecord(object):
                      }
         if self.vm_resp is not None:
             vdur_dict.update({"vim_id": self.vm_resp.vdu_id,
-                              "flavor_id": self.vm_resp.flavor_id,
-                              "image_id": self.vm_resp.image_id,
+                              "flavor_id": self.vm_resp.flavor_id
                               })
+            if self._vm_resp.has_field('image_id'):
+                vdur_dict.update({ "image_id": self.vm_resp.image_id })
 
         if self.management_ip is not None:
             vdur_dict["management_ip"] = self.management_ip
@@ -401,6 +405,13 @@ class VirtualDeploymentUnitRecord(object):
             vdur_dict["vm_management_ip"] = self.vm_management_ip
 
         vdur_dict.update(vdu_copy_dict)
+
+        if self.vm_resp is not None:
+            if self._vm_resp.has_field('volumes'):
+                for opvolume in self._vm_resp.volumes:
+                    vdurvol_data = [vduvol for vduvol in vdur_dict['volumes'] if vduvol['name'] == opvolume.name]
+                    if len(vdurvol_data) == 1:
+                       vdurvol_data[0]["volume_id"] = opvolume.volume_id
 
         icp_list = []
         ii_list = []
@@ -433,8 +444,8 @@ class VirtualDeploymentUnitRecord(object):
         placement_groups = []
         for group in self._placement_groups:
             placement_groups.append(group.as_dict())
-
         vdur_dict['placement_groups_info'] = placement_groups
+
         return RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_Vdur.from_dict(vdur_dict)
 
     @property
@@ -541,8 +552,10 @@ class VirtualDeploymentUnitRecord(object):
 
         vm_create_msg_dict = {
                 "name": self.name,
-                "image_name": self.image_name,
                 }
+
+        if self.image_name is not None:
+            vm_create_msg_dict["image_name"] = self.image_name
 
         if self.image_checksum is not None:
             vm_create_msg_dict["image_checksum"] = self.image_checksum
@@ -594,6 +607,10 @@ class VirtualDeploymentUnitRecord(object):
         msg.event_id = self._request_id
         msg.cloud_account = self.cloud_account_name
         msg.request_info.from_dict(vm_create_msg_dict)
+
+        for volume in self._vdud.volumes:
+            v = msg.request_info.volumes.add()
+            v.from_dict(volume.as_dict())
         return msg
 
     @asyncio.coroutine
@@ -1533,7 +1550,7 @@ class VirtualNetworkFunctionRecord(object):
             datastore.add(vdu)
 
             # Substitute any variables contained in the cloud config script
-            config = str(vdu.vdud_cloud_init)
+            config = str(vdu.vdud_cloud_init) if vdu.vdud_cloud_init is not None else ""
 
             parts = re.split("\{\{ ([^\}]+) \}\}", config)
             if len(parts) > 1:

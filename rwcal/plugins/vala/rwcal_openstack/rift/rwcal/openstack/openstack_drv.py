@@ -529,7 +529,8 @@ class NovaDriver(object):
          {
            server_name(string)        : Name of the VM/Server
            flavor_id  (string)        : UUID of the flavor to be used for VM
-           image_id   (string)        : UUID of the image to be used VM/Server instance
+           image_id   (string)        : UUID of the image to be used VM/Server instance,
+                                             This could be None if volumes (with images) are being used
            network_list(List)         : A List of network_ids. A port will be created in these networks
            port_list (List)           : A List of port-ids. These ports will be added to VM.
            metadata   (dict)          : A dictionary of arbitrary key-value pairs associated with VM/server
@@ -552,6 +553,7 @@ class NovaDriver(object):
 
         nvconn = self._get_nova_connection()
 
+
         try:
             server = nvconn.servers.create(kwargs['name'],
                                            kwargs['image_id'],
@@ -564,7 +566,7 @@ class NovaDriver(object):
                                            userdata             = kwargs['userdata'],
                                            security_groups      = kwargs['security_groups'],
                                            availability_zone    = kwargs['availability_zone'],
-                                           block_device_mapping = None,
+                                           block_device_mapping_v2 = kwargs['block_device_mapping_v2'],
                                            nics                 = nics,
                                            scheduler_hints      = kwargs['scheduler_hints'],
                                            config_drive         = None)
@@ -835,6 +837,26 @@ class NovaDriver(object):
         except Exception as e:
             logger.error("OpenstackDriver: Release Floating IP operation failed. Exception: %s"  %str(e))
             raise
+
+    def volume_list(self, server_id):
+        """
+          List of volumes attached to the server
+  
+          Arguments:
+              None
+          Returns:
+             List of dictionary objects where dictionary is representation of class (novaclient.v2.volumes.Volume)
+        """
+        nvconn =  self._get_nova_connection()
+        try:
+            volumes = nvconn.volumes.get_server_volumes(server_id=server_id)
+        except Exception as e:
+            logger.error("OpenstackDriver: Get volume information failed. Exception: %s"  %str(e))
+            raise
+
+        volume_info = [v.to_dict() for v in volumes]
+        return volume_info
+
 
     def group_list(self):
         """
@@ -1725,10 +1747,19 @@ class OpenstackDriver(object):
         return self.nova_drv.flavor_get(flavor_id)
 
     def nova_server_create(self, **kwargs):
+        def _verify_image(image_id):
+            image = self.glance_drv.image_get(image_id)
+            if image['status'] != 'active':
+                raise GlanceException.NotFound("Image with image_id: %s not found in active state. Current State: %s" %(image['id'], image['status']))
+
         assert kwargs['flavor_id'] == self.nova_drv.flavor_get(kwargs['flavor_id'])['id']
-        image = self.glance_drv.image_get(kwargs['image_id'])
-        if image['status'] != 'active':
-            raise GlanceException.NotFound("Image with image_id: %s not found in active state. Current State: %s" %(image['id'], image['status']))
+
+        if kwargs['block_device_mapping_v2'] is not None:
+            for block_map in kwargs['block_device_mapping_v2']:
+                if 'uuid' in block_map:
+                    _verify_image(block_map['uuid'])
+        else:
+            _verify_image(kwargs['image_id'])
 
         # if 'network_list' in kwargs:
         #     kwargs['network_list'].append(self._mgmt_network_id)
@@ -1793,6 +1824,9 @@ class OpenstackDriver(object):
 
     def nova_server_group_list(self):
         return self.nova_drv.group_list()
+
+    def nova_volume_list(self, server_id):
+        return self.nova_drv.volume_list(server_id)
 
     def neutron_network_list(self):
         return self.neutron_drv.network_list()

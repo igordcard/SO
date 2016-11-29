@@ -998,6 +998,16 @@ module rwcal
         type string;
       }
     }
+ 
+    list volumes {
+      key "name";
+
+      leaf name {
+        description "Name of the disk-volumes, e.g. vda, vdb etc";
+        type string;
+      }
+      uses manotypes:volume-info;
+    } 
   }
 
   container vdu-init-params {
@@ -1214,7 +1224,25 @@ module rwcal
       type string;
       description "Console URL from the VIM, if available";
     }
+
+    list volumes {
+      key "name";
+
+      leaf name {
+        description "Name of the disk-volumes, e.g. vda, vdb etc";
+        type string;
+      }
+
+      leaf volume-id {
+        description "CAL assigned volume-id ";
+        rwpb:field-inline "true";
+        rwpb:field-string-max 64;
+        type string;
+      }
+
+    } 
   }
+
 
   container vnf-resources {
     rwpb:msg-new VNFResources;

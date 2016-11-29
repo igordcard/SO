@@ -317,9 +317,22 @@ class NfviMetrics(object):
                 vdu_metrics.memory.utilization = 100 * vdu_metrics.memory.used / vdu_metrics.memory.total
 
                 # Storage
-                vdu_metrics.storage.used = metrics.storage.used
-                vdu_metrics.storage.total = 1e9 * self.vdur.vm_flavor.storage_gb
-                vdu_metrics.storage.utilization = 100 * vdu_metrics.storage.used / vdu_metrics.storage.total
+                try:
+                    vdu_metrics.storage.used = metrics.storage.used
+                    if self.vdur.has_field('volumes'):
+                        for volume in self.vdur.volumes:
+                            if vdu_metrics.storage.total is None:
+                               vdu_metrics.storage.total = 1e9 * volume.size
+                            else:
+                               vdu_metrics.storage.total += (1e9 * volume.size)
+                    else:
+                        vdu_metrics.storage.total = 1e9 * self.vdur.vm_flavor.storage_gb
+                    utilization = 100 * vdu_metrics.storage.used / vdu_metrics.storage.total
+                    if utilization > 100:
+                        utilization = 100
+                    vdu_metrics.storage.utilization = utilization
+                except ZeroDivisionError:
+                    vdu_metrics.storage.utilization = 0
 
                 # Network (incoming)
                 vdu_metrics.network.incoming.packets = metrics.network.incoming.packets

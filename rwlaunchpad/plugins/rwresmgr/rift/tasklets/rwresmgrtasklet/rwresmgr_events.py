@@ -178,10 +178,12 @@ class ResourceMgrEvent(object):
 
         def monitor_vdu_state(response_xpath, pathentry):
             self._log.info("Initiating VDU state monitoring for xpath: %s ", response_xpath)
-            loop_cnt = 180
+            time_to_wait = 300
+            sleep_time = 2
+            loop_cnt = int(time_to_wait/sleep_time)
             for i in range(loop_cnt):
-                self._log.debug("VDU state monitoring for xpath: %s. Sleeping for 1 second", response_xpath)
-                yield from asyncio.sleep(1, loop = self._loop)
+                self._log.debug("VDU state monitoring for xpath: %s. Sleeping for 2 second", response_xpath)
+                yield from asyncio.sleep(2, loop = self._loop)
                 try:
                     response_info = yield from self._parent.read_virtual_compute_info(pathentry.key00.event_id)
                 except Exception as e:
@@ -203,7 +205,7 @@ class ResourceMgrEvent(object):
                         return
             else:
                 ### End of loop. This is only possible if VDU did not reach active state
-                err_msg = "VDU state monitoring: VDU at xpath :{} did not reached active state in {} seconds. Aborting monitoring".format(response_xpath, loop_cnt)
+                err_msg = "VDU state monitoring: VDU at xpath :{} did not reached active state in {} seconds. Aborting monitoring".format(response_xpath, time_to_wait)
                 self._log.info(err_msg)
                 response_info = RwResourceMgrYang.VDUEventData_ResourceInfo()
                 response_info.resource_state = 'failed'

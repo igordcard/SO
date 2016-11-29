@@ -338,6 +338,22 @@ module vnfr
         uses manotypes:hypervisor-epa;
         uses manotypes:host-epa;
 
+        list volumes {
+          key "name";
+
+          leaf name {
+            description "Name of the disk-volumes, e.g. vda, vdb etc";
+            type string;
+          }
+
+          leaf volume-id {
+            description "VIM assigned volume id";
+            type string;
+          }
+
+          uses manotypes:volume-info;
+        }
+
         list alarms {
           description
               "A list of the alarms that have been created for this VDU";

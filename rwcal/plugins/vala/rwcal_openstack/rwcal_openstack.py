@@ -376,7 +376,8 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         kwargs = {}
         kwargs['name']      = vminfo.vm_name
         kwargs['flavor_id'] = vminfo.flavor_id
-        kwargs['image_id']  = vminfo.image_id
+        if vminfo.has_field('image_id'):
+            kwargs['image_id']  = vminfo.image_id
 
         with self._use_driver(account) as drv:
             ### If floating_ip is required and we don't have one, better fail before any further allocation
@@ -1227,7 +1228,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         return link
 
     @staticmethod
-    def _fill_vdu_info(vm_info, flavor_info, mgmt_network, port_list, server_group):
+    def _fill_vdu_info(vm_info, flavor_info, mgmt_network, port_list, server_group, volume_list = None):
         """Create a GI object for VDUInfoParams
 
         Converts VM information dictionary object returned by openstack
@@ -1284,6 +1285,19 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
         if flavor_info is not None:
             RwcalOpenstackPlugin._fill_epa_attributes(vdu, flavor_info)
+
+        # Fill the volume information
+        if volume_list is not None:
+            for os_volume in volume_list:
+                volr = vdu.volumes.add()
+                try:
+                   " Device name is of format /dev/vda"
+                   vol_name = (os_volume['device']).split('/')[2]
+                except:
+                   continue
+                volr.name = vol_name
+                volr.volume_id = os_volume['volumeId']
+
         return vdu
 
     @rwcalstatus(ret_on_failure=[""])
@@ -1854,6 +1868,136 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                 raise OpenstackCALOperationFailure("Create-flavor operation failed for cloud account: %s" %(account.name))
             return flavor_id
 
+    def _create_vm(self, account, vduinfo, pci_assignement=None, server_group=None, port_list=None, network_list=None, imageinfo_list=None):
+        """Create a new virtual machine.
+
+        Arguments:
+            account - a cloud account
+            vminfo - information that defines the type of VM to create
+
+        Returns:
+            The image id
+        """
+        kwargs = {}
+        kwargs['name']      = vduinfo.name
+        kwargs['flavor_id'] = vduinfo.flavor_id
+        if vduinfo.has_field('image_id'):
+            kwargs['image_id']  = vduinfo.image_id
+        else:
+            kwargs['image_id']  = ""
+
+        with self._use_driver(account) as drv:
+            ### If floating_ip is required and we don't have one, better fail before any further allocation
+            if vduinfo.has_field('allocate_public_address') and vduinfo.allocate_public_address:
+                if account.openstack.has_field('floating_ip_pool'):
+                    pool_name = account.openstack.floating_ip_pool
+                else:
+                    pool_name = None
+                floating_ip = self._allocate_floating_ip(drv, pool_name)
+            else:
+                floating_ip = None
+
+        if vduinfo.has_field('vdu_init') and vduinfo.vdu_init.has_field('userdata'):
+            kwargs['userdata'] = vduinfo.vdu_init.userdata
+        else:
+            kwargs['userdata'] = ''
+
+        if account.openstack.security_groups:
+            kwargs['security_groups'] = account.openstack.security_groups
+
+        kwargs['port_list'] = port_list
+        kwargs['network_list'] = network_list
+
+        metadata = {}
+        # Add all metadata related fields
+        if vduinfo.has_field('node_id'):
+            metadata['node_id'] = vduinfo.node_id
+        if pci_assignement is not None:
+            metadata['pci_assignement'] = pci_assignement
+        kwargs['metadata'] = metadata
+
+        if vduinfo.has_field('availability_zone') and vduinfo.availability_zone.has_field('name'):
+            kwargs['availability_zone']  = vduinfo.availability_zone
+        else:
+            kwargs['availability_zone'] = None
+
+        if server_group is not None:
+            kwargs['scheduler_hints'] = {'group': server_group}
+        else:
+            kwargs['scheduler_hints'] = None
+
+        kwargs['block_device_mapping_v2'] = None
+        if vduinfo.has_field('volumes') :
+            kwargs['block_device_mapping_v2'] = []
+            with self._use_driver(account) as drv:
+            # Only support image->volume
+                for volume in vduinfo.volumes:
+                    block_map = dict()
+                    block_map['boot_index'] = volume.boot_params.boot_priority
+                    if "image" in volume:
+                        # Support image->volume
+                        # Match retrived image info with volume based image name and checksum
+                        if volume.image is not None:
+                           matching_images = [img for img in imageinfo_list if img['name'] == volume.image]
+                           if volume.image_checksum is not None:
+                              matching_images = [img for img in matching_images if img['checksum'] == volume.image_checksum]
+                           img_id = matching_images[0]['id']
+                        if img_id is None:
+                           raise OpenstackCALOperationFailure("Create-vdu operation failed. Volume image not found for name {} checksum {}".format(volume.name, volume.checksum))
+                        block_map['uuid'] = img_id
+                        block_map['source_type'] = "image"
+                    else:
+                        block_map['source_type'] = "blank"
+                        
+                    block_map['device_name'] = volume.name
+                    block_map['destination_type'] = "volume"
+                    block_map['volume_size'] = volume.size
+                    block_map['delete_on_termination'] = True
+                    if volume.guest_params.has_field('device_type') and volume.guest_params.device_type == 'cdrom':
+                        block_map['device_type'] = 'cdrom'
+                    if volume.guest_params.has_field('device_bus') and volume.guest_params.device_bus == 'ide':
+                        block_map['disk_bus'] = 'ide'
+                    kwargs['block_device_mapping_v2'].append(block_map)
+                
+           
+        with self._use_driver(account) as drv:
+            vm_id = drv.nova_server_create(**kwargs)
+            if floating_ip:
+                self.prepare_vdu_on_boot(account, vm_id, floating_ip)
+
+        return vm_id
+
+    def get_openstack_image_info(self, account, image_name, image_checksum=None):
+        self.log.debug("Looking up image id for image name %s and checksum %s on cloud account: %s",
+                image_name, image_checksum, account.name
+                )
+
+        image_list = []
+        with self._use_driver(account) as drv:
+            image_list = drv.glance_image_list()
+        matching_images = [img for img in image_list if img['name'] == image_name]
+  
+        # If the image checksum was filled in then further filter the images by the checksum
+        if image_checksum is not None:
+            matching_images = [img for img in matching_images if img['checksum'] == image_checksum]
+        else:
+            self.log.warning("Image checksum not provided.  Lookup using image name (%s) only.",
+                                image_name) 
+  
+        if len(matching_images) == 0:
+            raise ResMgrCALOperationFailure("Could not find image name {} (using checksum: {}) for cloud account: {}".format(
+                  image_name, image_checksum, account.name
+                  ))
+  
+        elif len(matching_images) > 1:
+            unique_checksums = {i.checksum for i in matching_images}
+            if len(unique_checksums) > 1:
+                msg = ("Too many images with different checksums matched "
+                         "image name of %s for cloud account: %s" % (image_name, account.name))
+                raise ResMgrCALOperationFailure(msg)
+  
+        return matching_images[0]
+
     @rwcalstatus(ret_on_failure=[""])
     def do_create_vdu(self, account, vdu_init):
         """Create a new virtual deployment unit
@@ -1879,6 +2023,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
         port_list = []
         network_list = []
+        imageinfo_list = []
         for c_point in vdu_init.connection_points:
             if c_point.virtual_link_id in network_list:
                 assert False, "Only one port per network supported. Refer: http://specs.openstack.org/openstack/nova-specs/specs/juno/implemented/nfv-multiple-if-1-net.html"
@@ -1890,70 +2035,94 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         if not vdu_init.has_field('flavor_id'):
             vdu_init.flavor_id = self._select_resource_flavor(account,vdu_init)
 
+        ### Obtain all images for volumes and perform validations
+        if vdu_init.has_field('volumes'):
+            for volume in vdu_init.volumes:
+                if "image" in volume:
+                    image_checksum = volume.image_checksum if volume.has_field("image_checksum") else None
+                    image_info = self.get_openstack_image_info(account, volume.image, image_checksum)
+                    imageinfo_list.append(image_info)
+        elif vdu_init.has_field('image_id'):
+            with self._use_driver(account) as drv:
+                image_info = drv.glance_image_get(vdu_init.image_id)
+                imageinfo_list.append(image_info)
+
+        if not imageinfo_list:
+            err_str = ("VDU has no image information")
+            self.log.error(err_str)
+            raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+
         ### Check VDU Virtual Interface type and make sure VM with property exists
-        if vdu_init.connection_points is not None:
+        if vdu_init.connection_points:
                 ### All virtual interfaces need to be of the same type for Openstack Accounts
-                if not all(cp.type_yang == vdu_init.connection_points[0].type_yang for cp in vdu_init.connection_points):
-                    ### We have a mix of E1000 & VIRTIO virtual interface types in the VDU, abort instantiation.
-                    assert False, "Only one type of Virtual Intefaces supported for Openstack accounts. Found a mix of VIRTIO & E1000."
-
-                with self._use_driver(account) as drv:
-                    img_info = drv.glance_image_get(vdu_init.image_id)
-
-                virt_intf_type = vdu_init.connection_points[0].type_yang
-                if virt_intf_type == 'E1000':
-                    if 'hw_vif_model' in img_info and img_info.hw_vif_model == 'e1000':
-                        self.log.debug("VDU has Virtual Interface E1000, found matching image with property hw_vif_model=e1000")
+                if not (all(cp.type_yang == 'E1000' for cp in vdu_init.connection_points) or all(cp.type_yang != 'E1000' for cp in vdu_init.connection_points)):
+                    ### We have a mix of E1000 & VIRTIO/SR_IPOV virtual interface types in the VDU, abort instantiation.
+                    assert False, "Only one type of Virtual Intefaces supported for Openstack accounts. Found a mix of VIRTIO/SR_IOV &   E1000."
+  
+                ## It is not clear if all the images need to checked for HW properties. In the absence of model info describing each im  age's properties,
+                ###   we shall assume that all images need to have similar properties
+                for img_info in imageinfo_list:
+  
+                    virt_intf_type = vdu_init.connection_points[0].type_yang
+                    if virt_intf_type == 'E1000':
+                        if 'hw_vif_model' in img_info and img_info.hw_vif_model == 'e1000':
+                            self.log.debug("VDU has Virtual Interface E1000, found matching image with property hw_vif_model=e1000")
+                        else:
+                            err_str = ("VDU has Virtual Interface E1000, but image '%s' does not have property hw_vif_model=e1000" % img_info.name)
+                            self.log.error(err_str)
+                            raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                    elif virt_intf_type == 'VIRTIO' or virt_intf_type == 'SR_IOV':
+                        if 'hw_vif_model' in img_info:
+                            err_str = ("VDU has Virtual Interface %s, but image '%s' has hw_vif_model mismatch" % virt_intf_type,img_info.name)
+                            self.log.error(err_str)
+                            raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                        else:
+                            self.log.debug("VDU has Virtual Interface %s, found matching image" % virt_intf_type)
                     else:
-                        err_str = ("VDU has Virtual Interface E1000, but image '%s' does not have property hw_vif_model=e1000" % img_info.name)
+                        err_str = ("VDU Virtual Interface '%s' not supported yet" % virt_intf_type)
                         self.log.error(err_str)
-                        raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
-                elif virt_intf_type == 'VIRTIO':
-                    if 'hw_vif_model' in img_info:
-                        err_str = ("VDU has Virtual Interface VIRTIO, but image '%s' has hw_vif_model mismatch" % img_info.name)
-                        self.log.error(err_str)
-                        raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
-                    else:
-                        self.log.debug("VDU has Virtual Interface VIRTIO, found matching image")
-                else:
-                    err_str = ("VDU Virtual Interface '%s' not supported yet" % virt_intf_type)
-                    self.log.error(err_str)
-                    raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                        raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str) 
 
         with self._use_driver(account) as drv:
             ### Now Create VM
-            vm           = RwcalYang.VMInfoItem()
-            vm.vm_name   = vdu_init.name
-            vm.flavor_id = vdu_init.flavor_id
-            vm.image_id  = vdu_init.image_id
-            vm_network   = vm.network_list.add()
-            vm_network.network_id = drv._mgmt_network_id
-            if vdu_init.has_field('vdu_init') and vdu_init.vdu_init.has_field('userdata'):
-                vm.cloud_init.userdata = vdu_init.vdu_init.userdata
-
-            if vdu_init.has_field('node_id'):
-                vm.user_tags.node_id   = vdu_init.node_id;
-
-            if vdu_init.has_field('availability_zone') and vdu_init.availability_zone.has_field('name'):
-                vm.availability_zone = vdu_init.availability_zone.name
-
+            vm_network_list = []
+            vm_network_list.append(drv._mgmt_network_id)
+  
+            if vdu_init.has_field('volumes'):
+                  # Only combination supported: Image->Volume
+                  for volume in vdu_init.volumes:
+                      if "volume" in volume:
+                          err_str = ("VDU Volume source not supported yet")
+                          self.log.error(err_str)
+                          raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                      if "guest_params" not in volume:
+                          err_str = ("VDU Volume destination parameters '%s' not defined")
+                          self.log.error(err_str)
+                          raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                      if not volume.guest_params.has_field('device_type'):
+                          err_str = ("VDU Volume destination type '%s' not defined")
+                          self.log.error(err_str)
+                          raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+                      if volume.guest_params.device_type not in ['disk', 'cdrom'] :
+                          err_str = ("VDU Volume destination type '%s' not supported" % volume.guest_params.device_type)
+                          self.log.error(err_str)
+                          raise OpenstackCALOperationFailure("Create-vdu operation failed. Error- %s" % err_str)
+  
+  
+            server_group = None
             if vdu_init.has_field('server_group'):
-                ### Get list of server group in openstack for name->id mapping
-                openstack_group_list = drv.nova_server_group_list()
-                group_id = [ i['id'] for i in openstack_group_list if i['name'] == vdu_init.server_group.name]
-                if len(group_id) != 1:
-                    raise OpenstackServerGroupError("VM placement failed. Server Group %s not found in openstack. Available groups" %(vdu_init.server_group.name, [i['name'] for i in openstack_group_list]))
-                vm.server_group = group_id[0]
-
-            for port_id in port_list:
-                port = vm.port_list.add()
-                port.port_id = port_id
+                  ### Get list of server group in openstack for name->id mapping
+                  openstack_group_list = drv.nova_server_group_list()
+                  group_id = [ i['id'] for i in openstack_group_list if i['name'] == vdu_init.server_group.name]
+                  if len(group_id) != 1:
+                      raise OpenstackServerGroupError("VM placement failed. Server Group %s not found in openstack. Available groups" %(vdu_init.server_group.name, [i['name'] for i in openstack_group_list]))
+                  server_group = group_id[0]
 
             pci_assignement = self.prepare_vpci_metadata(drv, vdu_init)
             if pci_assignement != '':
                 vm.user_tags.pci_assignement = pci_assignement
 
-            vm_id = self.do_create_vm(account, vm, no_rwstatus=True)
+            vm_id = self._create_vm(account, vdu_init, pci_assignement=pci_assignement, server_group=server_group, port_list=port_list, network_list=vm_network_list, imageinfo_list = imageinfo_list)
             self.prepare_vdu_on_boot(account, vm_id, floating_ip)
             return vm_id
 
@@ -2107,11 +2276,13 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
             openstack_group_list = drv.nova_server_group_list()
             server_group = [ i['name'] for i in openstack_group_list if vm['id'] in i['members']]
+            openstack_srv_volume_list = drv.nova_volume_list(vm['id'])
             vdu_info = RwcalOpenstackPlugin._fill_vdu_info(vm,
                                                            flavor_info,
                                                            account.openstack.mgmt_network,
                                                            port_list,
-                                                           server_group)
+                                                           server_group,
+                                                           volume_list = openstack_srv_volume_list)
             if vdu_info.state == 'active':
                 try:
                     console_info = drv.nova_server_console(vdu_info.vdu_id)
@@ -2155,11 +2326,13 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                 openstack_group_list = drv.nova_server_group_list()
                 server_group = [ i['name'] for i in openstack_group_list if vm['id'] in i['members']]
 
+                openstack_srv_volume_list = drv.nova_volume_list(vm['id'])
                 vdu = RwcalOpenstackPlugin._fill_vdu_info(vm,
                                                           flavor_info,
                                                           account.openstack.mgmt_network,
                                                           port_list,
-                                                          server_group)
+                                                          server_group,
+                                                          volume_list = openstack_srv_volume_list)
                 if vdu.state == 'active':
                     try:
                         console_info = drv.nova_server_console(vdu.vdu_id)

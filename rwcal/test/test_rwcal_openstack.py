@@ -39,11 +39,11 @@ logger = logging.getLogger('rwcal-openstack')
 openstack_info = {
     'username'           : 'pluto',
     'password'           : 'mypasswd',
-    'auth_url'           : 'http://10.66.4.14:5000/v3/',
+    'auth_url'           : 'http://10.66.4.17:5000/v3/',
     'project_name'       : 'demo',
     'mgmt_network'       : 'private',
     'reserved_flavor'    : 'm1.medium',
-    'reserved_image'     : 'rift-root-latest.qcow2',
+    'reserved_image'     : 'Fedora-x86_64-20-20131211.1-sda-ping.qcow2',
     'physical_network'   : None,
     'network_type'       : None,
     'segmentation_id'    : None
@@ -55,6 +55,7 @@ def get_cal_account():
     Creates an object for class RwcalYang.CloudAccount()
     """
     account                        = RwcalYang.CloudAccount()
+    account.name                   = "Gruntxx"
     account.account_type           = "openstack"
     account.openstack.key          = openstack_info['username']
     account.openstack.secret       = openstack_info['password']
@@ -126,8 +127,9 @@ class OpenStackTest(unittest.TestCase):
 
         rc, rs = self.cal.get_network_list(self._acct)
         self.assertEqual(rc, RwStatus.SUCCESS)
-        networks = [ network for network in rs.networkinfo_list if (network.network_name == 'rift.cal.unittest.network' or network.network_name == 'rift.cal.virtual_link') ]
+        networks = [ network for network in rs.networkinfo_list if ((network.network_name == 'rift.cal.unittest.network') or ('rift.cal.virtual_link' in network.network_name) ) ]
         for network in networks:
+            logger.debug("Openstack-CAL-Test: Deleting old VL %s", network.network_id)
             self.cal.delete_virtual_link(self._acct, network.network_id)
 
     def tearDown(self):
@@ -858,7 +860,7 @@ class OpenStackTest(unittest.TestCase):
         vlink_req = self._get_virtual_link_request_info()
 
         rc, rsp = self.cal.create_virtual_link(self._acct, vlink_req)
-        self.assertEqual(rc, RwStatus.SUCCESS)
+        self.assertEqual(rc.status, RwStatus.SUCCESS)
         logger.info("Openstack-CAL-Test: Created virtual_link with Id: %s" %rsp)
         vlink_id = rsp
 
@@ -872,7 +874,7 @@ class OpenStackTest(unittest.TestCase):
         logger.info("Openstack-CAL-Test: Test Create VDU API")
 
         rc, rsp = self.cal.create_vdu(self._acct, vdu_req)
-        self.assertEqual(rc, RwStatus.SUCCESS)
+        self.assertEqual(rc.status, RwStatus.SUCCESS)
         logger.info("Openstack-CAL-Test: Created vdu with Id: %s" %rsp)
 
         vdu_id = rsp
@@ -898,7 +900,7 @@ class OpenStackTest(unittest.TestCase):
 
         ### Create another virtual_link
         rc, rsp = self.cal.create_virtual_link(self._acct, vlink_req)
-        self.assertEqual(rc, RwStatus.SUCCESS)
+        self.assertEqual(rc.status, RwStatus.SUCCESS)
         logger.info("Openstack-CAL-Test: Created virtual_link with Id: %s" %rsp)
         vlink_id2= rsp
 
@@ -931,7 +933,6 @@ class OpenStackTest(unittest.TestCase):
             self.assertNotEqual(virtual_link.virtual_link_id, vlink_id)
 
         logger.info("Openstack-CAL-Test: VDU/Virtual Link create-delete test successfully completed")
-
 
 class VmData(object):
     """A convenience class that provides all the stats and EPA Attributes
@@ -1059,5 +1060,5 @@ class VmData(object):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     unittest.main()
