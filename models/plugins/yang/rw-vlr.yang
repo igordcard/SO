@@ -32,7 +32,7 @@ module rw-vlr
   }
 
   import rw-cloud {
-    prefix "rwcloud";
+    prefix "rw-cloud";
   }
 
   import ietf-yang-types {
@@ -53,7 +53,7 @@ module rw-vlr
         "The cloud account to use when requesting resources for
          this vlr";
       type leafref {
-        path "/rwcloud:cloud/rwcloud:account/rwcloud:name";
+        path "/rw-cloud:cloud/rw-cloud:account/rw-cloud:name";
       }
     }
     leaf om-datacenter {
