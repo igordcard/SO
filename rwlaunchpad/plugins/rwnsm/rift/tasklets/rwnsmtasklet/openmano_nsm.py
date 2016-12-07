@@ -416,6 +416,7 @@ class OpenmanoNsr(object):
     @asyncio.coroutine
     def add_vlr(self, vlr):
         self._vlrs.append(vlr)
+        yield from self._publisher.publish_vlr(None, vlr.vlr_msg)
         yield from asyncio.sleep(1, loop=self._loop)
 
     @asyncio.coroutine
@@ -428,6 +429,7 @@ class OpenmanoNsr(object):
                     self._cli_api.ns_vim_network_delete,
                     vlr.name,
                     vlr.om_datacenter_name)
+            yield from self._publisher.unpublish_vlr(None, vlr.vlr_msg)
         yield from asyncio.sleep(1, loop=self._loop)
 
     @asyncio.coroutine
@@ -782,6 +784,7 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         self._cli_api = None
         self._http_api = None
         self._openmano_nsrs = {}
+        self._vnfr_uptime_tasks = {}
 
         self._set_ro_account(ro_account)
 
@@ -848,6 +851,18 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         self._log.debug("Attempting to publish openmano vnf: %s", vnfr_msg)
         with self._dts.transaction() as xact:
             yield from self._publisher.publish_vnfr(xact, vnfr_msg)
+        self._log.debug("Creating a task to update uptime for vnfr: %s", vnfr.id)
+        self._vnfr_uptime_tasks[vnfr.id] = self._loop.create_task(self.vnfr_uptime_update(vnfr))
+
+    def vnfr_uptime_update(self, vnfr):
+        try:
+            vnfr_ = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict({'id': vnfr.id})
+            while True:
+                vnfr_.uptime = int(time.time()) - vnfr._create_time
+                yield from self._publisher.publish_vnfr(None, vnfr_)
+                yield from asyncio.sleep(2, loop=self._loop)
+        except asyncio.CancelledError:
+            self._log.debug("Received cancellation request for vnfr_uptime_update task")
 
     @asyncio.coroutine
     def instantiate_vl(self, nsr, vlr):
@@ -868,6 +883,7 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         """
         nsr_id = nsr.id
         openmano_nsr = self._openmano_nsrs[nsr_id]
+
         yield from openmano_nsr.terminate()
         yield from openmano_nsr.delete()
 
@@ -883,7 +899,8 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         """
         Terminate the network service
         """
-        pass
+        if vnfr.id in self._vnfr_uptime_tasks:
+            self._vnfr_uptime_tasks[vnfr.id].cancel()
 
     @asyncio.coroutine
     def terminate_vl(self, vlr):

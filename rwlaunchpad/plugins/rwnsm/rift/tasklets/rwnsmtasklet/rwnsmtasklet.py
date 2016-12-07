@@ -796,6 +796,7 @@ class VirtualNetworkFunctionRecord(object):
         self._group_instance_id = group_instance_id
         self._placement_groups = placement_groups
         self._config_status = NsrYang.ConfigStates.INIT
+        self._create_time = int(time.time())
 
         self._prev_state = VnfRecordState.INIT
         self._state = VnfRecordState.INIT
@@ -1266,6 +1267,7 @@ class NetworkServiceRecord(object):
         self._is_active = False
         self._vl_phase_completed = False
         self._vnf_phase_completed = False
+        self.vlr_uptime_tasks = {}
 
 
         # Initalise the state to init
@@ -1457,17 +1459,20 @@ class NetworkServiceRecord(object):
         for vlr in self._vlrs:
             yield from self.nsm_plugin.instantiate_vl(self, vlr)
             vlr.state = VlRecordState.ACTIVE
-            self._loop.create_task(self.vlr_uptime_update(vlr))
+            self.vlr_uptime_tasks[vlr.id] = self._loop.create_task(self.vlr_uptime_update(vlr))
 
 
     def vlr_uptime_update(self, vlr):
-        vlr_ = RwVlrYang.YangData_Vlr_VlrCatalog_Vlr.from_dict({'id': vlr.id})
-        while True:
-            if vlr.state not in [VlRecordState.INIT, VlRecordState.INSTANTIATION_PENDING, VlRecordState.ACTIVE]:
-                return
-            vlr_.uptime = int(time.time()) - vlr._create_time
-            yield from self._vlr_handler.update(None, VirtualLinkRecord.vlr_xpath(vlr), vlr_)
-            yield from asyncio.sleep(2, loop=self._loop)
+        try:
+
+            vlr_ = RwVlrYang.YangData_Vlr_VlrCatalog_Vlr.from_dict({'id': vlr.id})
+            while True:
+                vlr_.uptime = int(time.time()) - vlr._create_time
+                yield from self._vlr_handler.update(None, VirtualLinkRecord.vlr_xpath(vlr), vlr_)
+                yield from asyncio.sleep(2, loop=self._loop)
+        except asyncio.CancelledError:
+            self._log.debug("Received cancellation request for vlr_uptime_update task")
+            yield from self._vlr_handler.delete(None, VirtualLinkRecord.vlr_xpath(vlr))
 
 
     @asyncio.coroutine
@@ -2417,6 +2422,8 @@ class NetworkServiceRecord(object):
             for vlr in self.vlrs:
                 yield from self.nsm_plugin.terminate_vl(vlr)
                 vlr.state = VlRecordState.TERMINATED
+                if vlr.id in self.vlr_uptime_tasks:
+                    self.vlr_uptime_tasks[vlr.id].cancel()
 
         self._log.debug("Terminating network service id %s", self.id)
 
