@@ -2505,7 +2505,13 @@ class VnfManager(object):
             self._dts, self._log, self._loop, self._cluster_name, self, self.vcs_handler, vnfr,
             mgmt_network=mgmt_network
             )
-        self._vnfds_to_vnfr[vnfr.vnfd.id] = self._vnfrs[vnfr.id]
+
+        #Update ref count
+        if vnfr.vnfd.id in self._vnfds_to_vnfr:
+            self._vnfds_to_vnfr[vnfr.vnfd.id] += 1
+        else:
+            self._vnfds_to_vnfr[vnfr.vnfd.id] = 1
+
         return self._vnfrs[vnfr.id]
 
     @asyncio.coroutine
@@ -2514,6 +2520,11 @@ class VnfManager(object):
         if vnfr.vnfr_id in self._vnfrs:
             self._log.debug("Deleting VNFR id %s", vnfr.vnfr_id)
             yield from self._vnfr_handler.delete(xact, vnfr.xpath)
+
+            if vnfr.vnfd.id in self._vnfds_to_vnfr:
+                if self._vnfds_to_vnfr[vnfr.vnfd.id]:
+                    self._vnfds_to_vnfr[vnfr.vnfd.id] -= 1
+
             del self._vnfrs[vnfr.vnfr_id]
 
     @asyncio.coroutine
@@ -2542,7 +2553,7 @@ class VnfManager(object):
         """ Is this VNFD in use """
         self._log.debug("Is this VNFD in use - msg:%s", vnfd_id)
         if vnfd_id in self._vnfds_to_vnfr:
-            return self._vnfds_to_vnfr[vnfd_id].in_use()
+            return (self._vnfds_to_vnfr[vnfd_id] > 0)
         return False
 
     @asyncio.coroutine
@@ -2556,18 +2567,17 @@ class VnfManager(object):
     def delete_vnfd(self, vnfd_id):
         """ Delete the Virtual Network Function descriptor with the passed id """
         self._log.debug("Deleting the virtual network function descriptor - %s", vnfd_id)
-        if vnfd_id not in self._vnfds_to_vnfr:
-            self._log.debug("Delete VNFD failed - cannot find vnfd-id %s", vnfd_id)
-            raise VirtualNetworkFunctionDescriptorNotFound("Cannot find %s", vnfd_id)
+        if vnfd_id in self._vnfds_to_vnfr:
+            if self._vnfds_to_vnfr[vnfd_id]:
+                self._log.debug("Cannot delete VNFD id %s reference exists %s",
+                                vnfd_id,
+                                self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
+                raise VirtualNetworkFunctionDescriptorRefCountExists(
+                    "Cannot delete :%s, ref_count:%s",
+                    vnfd_id,
+                    self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
 
-        if self._vnfds_to_vnfr[vnfd_id].in_use():
-            self._log.debug("Cannot delete VNFD id %s reference exists %s",
-                            vnfd_id,
-                            self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
-            raise VirtualNetworkFunctionDescriptorRefCountExists(
-                "Cannot delete :%s, ref_count:%s",
-                vnfd_id,
-                self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count)
+            del self._vnfds_to_vnfr[vnfd_id]
 
         # Remove any files uploaded with VNFD and stored under $RIFT_ARTIFACTS/libs/<id>
         try:
@@ -2580,7 +2590,6 @@ class VnfManager(object):
                             format(self._vnfds_to_vnfr[vnfd_id].vnfd.name, e))
             self._log.exception(e)
 
-        del self._vnfds_to_vnfr[vnfd_id]
 
     def vnfd_refcount_xpath(self, vnfd_id):
         """ xpath for ref count entry """
@@ -2592,15 +2601,15 @@ class VnfManager(object):
         """ Get the vnfd_list from this VNFM"""
         vnfd_list = []
         if vnfd_id is None or vnfd_id == "":
-            for vnfr in self._vnfds_to_vnfr.values():
+            for vnfd in self._vnfds_to_vnfr.keys():
                 vnfd_msg = RwVnfrYang.YangData_Vnfr_VnfrCatalog_VnfdRefCount()
-                vnfd_msg.vnfd_id_ref = vnfr.vnfd.id
-                vnfd_msg.instance_ref_count = vnfr.vnfd_ref_count
-                vnfd_list.append((self.vnfd_refcount_xpath(vnfr.vnfd.id), vnfd_msg))
+                vnfd_msg.vnfd_id_ref = vnfd
+                vnfd_msg.instance_ref_count = self._vnfds_to_vnfr[vnfd]
+                vnfd_list.append((self.vnfd_refcount_xpath(vnfd), vnfd_msg))
         elif vnfd_id in self._vnfds_to_vnfr:
                 vnfd_msg = RwVnfrYang.YangData_Vnfr_VnfrCatalog_VnfdRefCount()
-                vnfd_msg.vnfd_id_ref = self._vnfds_to_vnfr[vnfd_id].vnfd.id
-                vnfd_msg.instance_ref_count = self._vnfds_to_vnfr[vnfd_id].vnfd_ref_count
+                vnfd_msg.vnfd_id_ref = vnfd_id
+                vnfd_msg.instance_ref_count = self._vnfds_to_vnfr[vnfd_id]
                 vnfd_list.append((self.vnfd_refcount_xpath(vnfd_id), vnfd_msg))
 
         return vnfd_list
