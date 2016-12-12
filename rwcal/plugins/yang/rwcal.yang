@@ -231,6 +231,17 @@ module rwcal
           mandatory true;
         }
 
+        leaf user-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack user";
+        }
+        leaf project-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack project";
+        }
+
         leaf tenant {
           type string;
           mandatory true;
