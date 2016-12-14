@@ -158,6 +158,7 @@ fi
 # and install of the packages required to build and run
 # this module
 if $runMkcontainer; then
+    sudo apt-get install -y libxml2-dev libxslt-dev
     sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
 fi
 
@@ -269,8 +270,6 @@ if [[ $UIPathToBuild ]]; then
     sudo make -C $UIPathToBuild install
 fi
 
-echo "To run SO with UI please run:"
-echo 'sudo -H /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode'
-echo
-echo "To run SO without UI please run:"
-echo 'sudo -H /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode --no-ui'
+echo "Creating Service ...."
+sudo $(dirname $0)/create_launchpad_service
+

@@ -82,7 +82,7 @@ class SDNAccountDtsOperdataHandler(object):
 
     def _register_show_status(self):
         def get_xpath(sdn_name=None):
-            return "D,/rw-sdn:sdn-account{}/rw-sdn:connection-status".format(
+            return "D,/rw-sdn:sdn/rw-sdn:account{}/rw-sdn:connection-status".format(
                     "[name='%s']" % sdn_name if sdn_name is not None else ''
                    )
 
@@ -152,7 +152,7 @@ class SDNAccountDtsOperdataHandler(object):
         yield from self._register_validate_rpc()
 
 class SDNAccountDtsHandler(object):
-    XPATH = "C,/rw-sdn:sdn-account"
+    XPATH = "C,/rw-sdn:sdn/rw-sdn:account"
 
     def __init__(self, dts, log, parent):
         self._dts = dts

@@ -38,7 +38,7 @@ module rw-vnfr
   }
 
   import rw-cloud {
-    prefix "rwcloud";
+    prefix "rw-cloud";
   }
 
   import rwvcs-types {
@@ -150,7 +150,7 @@ module rw-vnfr
         "The cloud account to use when requesting resources for
          this vnf";
       type leafref {
-        path "/rwcloud:cloud/rwcloud:account/rwcloud:name";
+        path "/rw-cloud:cloud/rw-cloud:account/rw-cloud:name";
       }
     }
 

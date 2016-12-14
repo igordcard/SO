@@ -851,8 +851,8 @@ module mano-types
       }
 
       choice numa-policy {
-        case numa-unware {
-          leaf numa-unware {
+        case numa-unaware {
+          leaf numa-unaware {
             type empty;
           }
         }

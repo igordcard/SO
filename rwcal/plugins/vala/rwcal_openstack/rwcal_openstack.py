@@ -1180,6 +1180,8 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         if ('fixed_ips' in port_info) and (len(port_info['fixed_ips']) >= 1):
             if 'ip_address' in port_info['fixed_ips'][0]:
                 c_point.ip_address = port_info['fixed_ips'][0]['ip_address']
+        if 'mac_address' in port_info :
+            c_point.mac_addr = port_info['mac_address']
         if port_info['status'] == 'ACTIVE':
             c_point.state = 'active'
         else:

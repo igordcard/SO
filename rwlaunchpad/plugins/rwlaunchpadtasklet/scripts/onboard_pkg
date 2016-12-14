@@ -400,8 +400,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-p", "--upload-port", default=4567, type=int,
                         help="Upload port number, default 4567")
-    parser.add_argument("-P", "--restconf-port", default=8888, type=int,
-                        help="RESTconf port number, default 8888")
+    parser.add_argument("-P", "--restconf-port", default=8008, type=int,
+                        help="RESTconf port number, default 8008")
     parser.add_argument("--restconf-user", default='admin',
                         help="RESTconf user name, default admin")
     parser.add_argument("--restconf-password", default='admin',
