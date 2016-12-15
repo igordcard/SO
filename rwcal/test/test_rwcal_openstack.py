@@ -33,6 +33,13 @@ from rift.rwcal.openstack.openstack_drv import KeystoneDriver, NovaDriver
 
 logger = logging.getLogger('rwcal-openstack')
 
+PING_USERDATA = '''
+#cloud-config
+password: fedora
+chpasswd: { expire: False }
+ssh_pwauth: True
+'''
+
 #
 # Important information about openstack installation. This needs to be manually verified
 #
@@ -831,8 +838,23 @@ class OpenStackTest(unittest.TestCase):
         vdu.node_id = OpenStackTest.NodeID
         vdu.image_id = self._image.id
         vdu.flavor_id = self._flavor.id
-        vdu.vdu_init.userdata = ''
+        vdu.vdu_init.userdata = PING_USERDATA
         vdu.allocate_public_address = True
+        meta1 = vdu.custom_boot_data.custom_meta_data.add()
+        meta1.name = "EMS_IP"
+        meta1.data_type = "STRING"
+        meta1.value = "10.5.6.6"
+        #meta2 = vdu.custom_boot_data.custom_meta_data.add()
+        #meta2.name = "Cluster_data"
+        #meta2.data_type = "JSON"
+        #meta2.value = '''{ "cluster_id": "12" , "vnfc_id": "112" }'''
+        #vdu.custom_boot_data.custom_drive = True
+        customfile1 = vdu.custom_boot_data.custom_config_files.add()
+        customfile1.source = "abcdef124"
+        customfile1.dest = "/tmp/tempfile.txt"
+        customfile2 = vdu.custom_boot_data.custom_config_files.add()
+        customfile2.source = "123456"
+        customfile2.dest = "/tmp/tempfile2.txt"
         c1 = vdu.connection_points.add()
         c1.name = "c_point1"
         c1.virtual_link_id = virtual_link_id

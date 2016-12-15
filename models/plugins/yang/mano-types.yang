@@ -40,6 +40,13 @@ module mano-types
       "Derived from earlier versions of base YANG files";
   }
 
+  typedef meta-data-type {
+    type enumeration {
+      enum STRING;
+      enum JSON;
+    }
+  }
+
   typedef parameter-data-type {
     type enumeration {
       enum STRING;
@@ -2025,6 +2032,60 @@ module mano-types
     }
   }
 
+  grouping custom-config-files {
+    description "Grouping for files needed to be mounted into an additional drive";
+    list custom-config-files {
+      description
+          "List of configuration files to be written on an additional drive";
+      key "source";
+      leaf source {
+        description "Name of the configuration file";
+        type string;
+      }
+      leaf dest {
+        description "Full path of the destination in the guest";
+        type string;
+      }
+    }
+  }
+
+  grouping custom-meta-data {
+    description "Grouping for instance-specific meta data";
+    list custom-meta-data {
+      description
+          "List of meta-data to be associated with the instance";
+      key "name";
+      leaf name {
+        description "Name of the meta-data parameter";
+        type string;
+      }
+
+      leaf data-type {
+        description "Data-type the meta-data parameter";
+        type manotypes:meta-data-type;
+        default "STRING";
+      }
+
+      leaf value {
+        description "Value of the meta-data parameter";
+        type string;
+      }
+    }
+  }
+
+  grouping custom-boot-data {
+    description "Grouping for custom vim data";
+    container custom-boot-data {
+      uses manotypes:custom-config-files;
+      uses manotypes:custom-meta-data;
+      leaf custom-drive {
+        description "Some VIMs implement custom drives to host custom-files or meta-data";
+        type boolean;
+        default false;
+      } 
+    }
+  }
+
   grouping volume-info {
     description "Grouping for Volume-info";
 
@@ -2097,6 +2158,8 @@ module mano-types
           enum lun;
         }
       }
+
+      uses custom-meta-data;
     }
   }
 }

@@ -173,6 +173,8 @@ if [[ $PLATFORM == ub16 ]]; then
 	 rw.core.rwvx-rwdts=${PLATFORM_VERSION} \
 	 rw.automation.core-RWAUTO=${PLATFORM_VERSION} \
          rw.core.rwvx-rwha-1.0=${PLATFORM_VERSION}
+
+    sudo apt-get install python-cinderclient
     
     sudo chmod 777 /usr/rift /usr/rift/usr/share
     

@@ -26,12 +26,14 @@ from novaclient import client as nova_client
 from neutronclient.neutron import client as ntclient
 from glanceclient.v2 import client as glclient
 from ceilometerclient import client as ceilo_client
+from cinderclient.v2 import client as cinder_client
 
 # Exceptions
 import novaclient.exceptions as NovaException
 import keystoneclient.exceptions as KeystoneExceptions
 import neutronclient.common.exceptions as NeutronException
 import glanceclient.exc as GlanceException
+import cinderclient.exceptions as CinderException
 
 logger = logging.getLogger('rwcal.openstack.drv')
 logger.setLevel(logging.DEBUG)
@@ -559,7 +561,7 @@ class NovaDriver(object):
                                            kwargs['image_id'],
                                            kwargs['flavor_id'],
                                            meta                 = kwargs['metadata'],
-                                           files                = None,
+                                           files                = kwargs['files'],
                                            reservation_id       = None,
                                            min_count            = None,
                                            max_count            = None,
@@ -569,7 +571,7 @@ class NovaDriver(object):
                                            block_device_mapping_v2 = kwargs['block_device_mapping_v2'],
                                            nics                 = nics,
                                            scheduler_hints      = kwargs['scheduler_hints'],
-                                           config_drive         = None)
+                                           config_drive         = kwargs['config_drive'])
         except Exception as e:
             logger.info("OpenstackDriver: Create Server operation failed. Exception: %s" %(str(e)))
             raise
@@ -1659,12 +1661,14 @@ class OpenstackDriver(object):
             self.nova_drv      = NovaDriverV21(self.ks_drv)
             self.neutron_drv   = NeutronDriverV2(self.ks_drv)
             self.ceilo_drv     = CeilometerDriverV2(self.ks_drv)
+            self.cinder_drv     = CinderDriverV2(self.ks_drv)
         elif auth_url.find('/v2') != -1:
             self.ks_drv        = KeystoneDriverV2(username, password, auth_url, tenant_name, insecure)
             self.glance_drv    = GlanceDriverV2(self.ks_drv)
             self.nova_drv      = NovaDriverV2(self.ks_drv)
             self.neutron_drv   = NeutronDriverV2(self.ks_drv)
             self.ceilo_drv     = CeilometerDriverV2(self.ks_drv)
+            self.cinder_drv     = CinderDriverV2(self.ks_drv)
         else:
             logger.error("Could not identity the version information for openstack service endpoints. Auth_URL should contain \"/v2\" or \"/v3\" string in it")
             raise NotImplementedError("Auth URL is wrong or invalid. Only Keystone v2 & v3 supported")
@@ -2034,3 +2038,136 @@ class OpenstackDriver(object):
 
     def ceilo_alarm_delete(self, alarm_id):
         self.ceilo_drv.client.alarms.delete(alarm_id)
+
+    def cinder_volume_list(self):
+        return self.cinder_drv.volume_list()
+  
+    def cinder_volume_get(self,vol_id):
+        return self.cinder_drv.volume_get(vol_id)
+  
+    def cinder_volume_set_metadata(self, volumeid, metadata):
+        return self.cinder_drv.volume_set_metadata(volumeid, metadata)
+  
+    def cinder_volume_delete_metadata(self, volumeid, metadata):
+        return self.cinder_drv.volume_delete_metadata(volumeid, metadata)
+          
+              
+          
+class CinderDriver(object):
+      """
+      Driver for openstack cinder-client
+      """
+      def __init__(self, ks_drv, service_name, version):
+          """
+          Constructor for CinderDriver
+          Arguments: KeystoneDriver class object
+          """
+          self.ks_drv = ks_drv
+          self._service_name = service_name
+          self._version = version
+  
+      def _get_cinder_credentials(self):
+          """
+          Returns a dictionary of kwargs required to instantiate python-cinderclient class
+  
+          Arguments: None
+  
+          Returns:
+             A dictionary object of arguments
+          """
+          creds             = {}
+          creds['version']  = self._version 
+          creds['username']   = self.ks_drv.get_username() 
+          creds['api_key']   = self.ks_drv.get_password() 
+          creds['auth_url'] = self.ks_drv.get_service_endpoint("identity", "publicURL") 
+          creds['project_id'] = self.ks_drv.get_tenant_name() 
+          creds['insecure']   = self.ks_drv.get_security_mode()
+  
+          return creds
+
+      def _get_cinder_connection(self):
+          """
+          Returns a object of class python-cinderclient
+          """
+          if not hasattr(self, '_cinder_connection'):
+              self._cinder_connection = cinder_client.Client(**self._get_cinder_credentials())
+          else:
+              # Reinitialize if auth_token is no longer valid
+              if not self.ks_drv.is_auth_token_valid():
+                  self._cinder_connection = cinder_client.Client(**self._get_cinder_credentials())
+          return self._cinder_connection
+  
+      def volume_list(self):
+          """
+          Returns list of dictionaries. Each dictionary contains attributes associated with
+          volumes
+  
+          Arguments: None
+  
+          Returns: List of dictionaries.
+          """
+          cinderconn = self._get_cinder_connection()
+          volumes = []
+          try:
+              volume_info = cinderconn.volumes.list()
+          except Exception as e:
+              logger.error("OpenstackDriver: List volumes operation failed. Exception: %s" %(str(e)))
+              raise
+          volumes = [ volume for volume in volume_info ]
+          return volumes
+  
+      def volume_get(self, volume_id):
+          """
+          Get details volume
+  
+          Arguments: None
+  
+          Returns: List of dictionaries.
+          """
+          cinderconn = self._get_cinder_connection()
+          try:
+              vol = cinderconn.volumes.get(volume_id)
+          except Exception as e:
+              logger.error("OpenstackDriver: Get volume operation failed. Exception: %s" %(str(e)))
+              raise
+          return vol
+
+      def volume_set_metadata(self, volume_id, metadata):
+          """
+          Set metadata for volume
+          Metadata is a dictionary of key-value pairs
+  
+          Arguments: None
+  
+          Returns: List of dictionaries.
+          """
+          cinderconn = self._get_cinder_connection()
+          try:
+              cinderconn.volumes.set_metadata(volume_id, metadata)
+          except Exception as e:
+              logger.error("OpenstackDriver: Set metadata operation failed. Exception: %s" %(str(e)))
+              raise
+  
+      def volume_delete_metadata(self, volume_id, metadata):
+          """
+          Delete metadata for volume
+          Metadata is a dictionary of key-value pairs
+  
+          Arguments: None
+  
+          Returns: List of dictionaries.
+          """
+          cinderconn = self._get_cinder_connection()
+          try:
+              cinderconn.volumes.delete_metadata(volume_id, metadata)
+          except Exception as e:
+              logger.error("OpenstackDriver: Delete metadata operation failed. Exception: %s" %(str(e)))
+              raise
+  
+class CinderDriverV2(CinderDriver):
+      """
+      Driver for openstack cinder-client V2
+      """
+      def __init__(self, ks_drv):
+          super(CinderDriverV2, self).__init__(ks_drv, 'volumev2', 2)
+  

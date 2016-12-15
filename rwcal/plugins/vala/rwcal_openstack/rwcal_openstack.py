@@ -20,6 +20,8 @@ import logging
 import os
 import subprocess
 import uuid
+import tempfile
+import yaml
 
 import rift.rwcal.openstack as openstack_drv
 import rw_status
@@ -27,6 +29,10 @@ import rift.cal.rwcal_status as rwcal_status
 import rwlogger
 import neutronclient.common.exceptions as NeutronException
 import keystoneclient.exceptions as KeystoneExceptions
+import tornado
+import gi
+
+gi.require_version('RwSdn', '1.0')
 
 from gi.repository import (
     GObject,
@@ -362,6 +368,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             image = drv.glance_image_get(image_id)
         return RwcalOpenstackPlugin._fill_image_info(image)
 
+    # This is being deprecated. Please do not use for new SW development
     @rwstatus(ret_on_failure=[""])
     def do_create_vm(self, account, vminfo):
         """Create a new virtual machine.
@@ -1230,7 +1237,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         return link
 
     @staticmethod
-    def _fill_vdu_info(vm_info, flavor_info, mgmt_network, port_list, server_group, volume_list = None):
+    def _fill_vdu_info(drv, vm_info, flavor_info, mgmt_network, port_list, server_group, volume_list = None):
         """Create a GI object for VDUInfoParams
 
         Converts VM information dictionary object returned by openstack
@@ -1261,6 +1268,14 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         for key, value in vm_info['metadata'].items():
             if key == 'node_id':
                 vdu.node_id = value
+            else:
+                custommetadata = vdu.custom_boot_data.custom_meta_data.add()
+                custommetadata.name = key
+                custommetadata.value = str(value)
+
+        # Look for config_drive
+        if ('config_drive' in vm_info):
+            vdu.custom_boot_data.custom_drive = vm_info['config_drive']
         if ('image' in vm_info) and ('id' in vm_info['image']):
             vdu.image_id = vm_info['image']['id']
         if ('flavor' in vm_info) and ('id' in vm_info['flavor']):
@@ -1299,6 +1314,16 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                    continue
                 volr.name = vol_name
                 volr.volume_id = os_volume['volumeId']
+                try:
+                   vol_details = drv.cinder_volume_get(volr.volume_id)
+                except:
+                   continue
+                if vol_details is None:
+                   continue
+                for key, value in vol_details.metadata.items():
+                      volmd = volr.custom_meta_data.add()
+                      volmd.name = key
+                      volmd.value = value
 
         return vdu
 
@@ -1911,12 +1936,33 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         kwargs['network_list'] = network_list
 
         metadata = {}
+        files = {}
+        config_drive = False
         # Add all metadata related fields
         if vduinfo.has_field('node_id'):
             metadata['node_id'] = vduinfo.node_id
         if pci_assignement is not None:
             metadata['pci_assignement'] = pci_assignement
+        if vduinfo.has_field('custom_boot_data'):
+            if vduinfo.custom_boot_data.has_field('custom_meta_data'):
+                for custom_meta_item in vduinfo.custom_boot_data.custom_meta_data:
+                    if custom_meta_item.data_type == "STRING":
+                       metadata[custom_meta_item.name] = custom_meta_item.value
+                    elif custom_meta_item.data_type == "JSON":
+                       metadata[custom_meta_item.name] = tornado.escape.json_decode(custom_meta_item.value)
+                    else:
+                       raise OpenstackCALOperationFailure("Create-vdu operation failed. Unsupported data-type {} for custom-meta-data name {} ".format(custom_meta_item.data_type, custom_meta_item.name))
+            if vduinfo.custom_boot_data.has_field('custom_config_files'):
+                for custom_config_file in vduinfo.custom_boot_data.custom_config_files:
+                    files[custom_config_file.dest] = custom_config_file.source
+
+            if vduinfo.custom_boot_data.has_field('custom_drive'):
+                if vduinfo.custom_boot_data.custom_drive is True:
+                     config_drive = True
+                     
         kwargs['metadata'] = metadata
+        kwargs['files'] = files
+        kwargs['config_drive'] = config_drive
 
         if vduinfo.has_field('availability_zone') and vduinfo.availability_zone.has_field('name'):
             kwargs['availability_zone']  = vduinfo.availability_zone
@@ -1929,6 +1975,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             kwargs['scheduler_hints'] = None
 
         kwargs['block_device_mapping_v2'] = None
+        vol_metadata = False
         if vduinfo.has_field('volumes') :
             kwargs['block_device_mapping_v2'] = []
             with self._use_driver(account) as drv:
@@ -1965,7 +2012,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         with self._use_driver(account) as drv:
             vm_id = drv.nova_server_create(**kwargs)
             if floating_ip:
-                self.prepare_vdu_on_boot(account, vm_id, floating_ip)
+                self.prepare_vdu_on_boot(account, vm_id, floating_ip, vduinfo.volumes)
 
         return vm_id
 
@@ -2134,7 +2181,6 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                 vm.user_tags.pci_assignement = pci_assignement
 
             vm_id = self._create_vm(account, vdu_init, pci_assignement=pci_assignement, server_group=server_group, port_list=port_list, network_list=vm_network_list, imageinfo_list = imageinfo_list)
-            self.prepare_vdu_on_boot(account, vm_id, floating_ip)
             return vm_id
 
     def prepare_vpci_metadata(self, drv, vdu_init):
@@ -2180,7 +2226,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
 
 
-    def prepare_vdu_on_boot(self, account, server_id, floating_ip):
+    def prepare_vdu_on_boot(self, account, server_id, floating_ip,  volumes=None):
         cmd = PREPARE_VM_CMD.format(auth_url     = account.openstack.auth_url,
                                     username     = account.openstack.key,
                                     password     = account.openstack.secret,
@@ -2190,6 +2236,24 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
         if floating_ip is not None:
             cmd += (" --floating_ip "+ floating_ip.ip)
+
+        vol_metadata = False
+        if volumes is not None:
+            for volume in volumes:
+                if volume.guest_params.has_field('custom_meta_data'):
+                    vol_metadata = True
+                    break
+        
+        if vol_metadata is True:       
+            tmp_file = None
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp_file:
+                 vol_list = list()
+                 for volume in volumes:
+                    vol_dict = volume.as_dict()
+                    vol_list.append(vol_dict)
+
+                 yaml.dump(vol_list, tmp_file)
+            cmd += (" --vol_metadata {}").format(tmp_file.name)
 
         exec_path = 'python3 ' + os.path.dirname(openstack_drv.__file__)
         exec_cmd = exec_path+'/'+cmd
@@ -2286,7 +2350,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             openstack_group_list = drv.nova_server_group_list()
             server_group = [ i['name'] for i in openstack_group_list if vm['id'] in i['members']]
             openstack_srv_volume_list = drv.nova_volume_list(vm['id'])
-            vdu_info = RwcalOpenstackPlugin._fill_vdu_info(vm,
+            vdu_info = RwcalOpenstackPlugin._fill_vdu_info(drv, vm,
                                                            flavor_info,
                                                            account.openstack.mgmt_network,
                                                            port_list,
@@ -2335,7 +2399,7 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
                 server_group = [ i['name'] for i in openstack_group_list if vm['id'] in i['members']]
 
                 openstack_srv_volume_list = drv.nova_volume_list(vm['id'])
-                vdu = RwcalOpenstackPlugin._fill_vdu_info(vm,
+                vdu = RwcalOpenstackPlugin._fill_vdu_info(drv, vm,
                                                           flavor_info,
                                                           account.openstack.mgmt_network,
                                                           port_list,
