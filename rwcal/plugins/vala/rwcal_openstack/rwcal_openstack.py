@@ -75,7 +75,6 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         self._rwlog_handler = None
         RwcalOpenstackPlugin.instance_num += 1
 
-
     @contextlib.contextmanager
     def _use_driver(self, account):
         if self._rwlog_handler is None:
@@ -83,12 +82,14 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
 
         with rwlogger.rwlog_root_handler(self._rwlog_handler):
             try:
-                drv = self._driver_class(username      = account.openstack.key,
-                                         password      = account.openstack.secret,
-                                         auth_url      = account.openstack.auth_url,
-                                         tenant_name   = account.openstack.tenant,
-                                         mgmt_network  = account.openstack.mgmt_network,
-                                         cert_validate = account.openstack.cert_validate )
+                drv = self._driver_class(username            = account.openstack.key,
+                                         password            = account.openstack.secret,
+                                         auth_url            = account.openstack.auth_url,
+                                         tenant_name         = account.openstack.tenant,
+                                         mgmt_network        = account.openstack.mgmt_network,
+                                         cert_validate       = account.openstack.cert_validate,
+                                         user_domain_name    = account.openstack.user_domain,
+                                         project_domain_name = account.openstack.project_domain)
             except (KeystoneExceptions.Unauthorized, KeystoneExceptions.AuthorizationFailure,
                         NeutronException.NotFound) as e:
                 raise

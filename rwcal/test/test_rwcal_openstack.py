@@ -20,7 +20,6 @@ import logging
 import time
 import unittest
 import hashlib
-
 import novaclient.exceptions as nova_exception
 import paramiko
 import rw_peas
@@ -29,7 +28,7 @@ from keystoneclient import v3 as ksclient
 
 from gi.repository import RwcalYang
 from gi.repository.RwTypes import RwStatus
-from rift.rwcal.openstack.openstack_drv import KeystoneDriver, NovaDriver
+from rift.rwcal.openstack.openstack_drv import KeystoneDriver, NovaDriver, KeystoneDriverV3, KeystoneDriverV2
 
 logger = logging.getLogger('rwcal-openstack')
 
@@ -46,7 +45,22 @@ openstack_info = {
     'reserved_image'     : 'Fedora-x86_64-20-20131211.1-sda-ping.qcow2',
     'physical_network'   : None,
     'network_type'       : None,
-    'segmentation_id'    : None
+    'segmentation_id'    : None,
+    'user_domain_name'   : 'default',
+    'project_domain_name': 'default'
+    }
+
+openstack_V3_info = {
+    'username'           : 'riftdev_admin',
+    'password'           : 'mypasswd',
+    'auth_url'           : 'http://10.68.0.11:5000/v3/',
+    'project_name'       : 'demov3',
+    'mgmt_network'       : 'center',
+    'physical_network'   : None,
+    'network_type'       : None,
+    'segmentation_id'    : None,
+    'user_domain_name'   : 'riftdev',
+    'project_domain_name': 'riftdev'
     }
 
 
@@ -54,14 +68,16 @@ def get_cal_account():
     """
     Creates an object for class RwcalYang.CloudAccount()
     """
-    account                        = RwcalYang.CloudAccount()
-    account.name                   = "Gruntxx"
-    account.account_type           = "openstack"
-    account.openstack.key          = openstack_info['username']
-    account.openstack.secret       = openstack_info['password']
-    account.openstack.auth_url     = openstack_info['auth_url']
-    account.openstack.tenant       = openstack_info['project_name']
-    account.openstack.mgmt_network = openstack_info['mgmt_network']
+    account                          = RwcalYang.CloudAccount()
+    account.name                     = "Gruntxx"
+    account.account_type             = "openstack"
+    account.openstack.key            = openstack_info['username']
+    account.openstack.secret         = openstack_info['password']
+    account.openstack.auth_url       = openstack_info['auth_url']
+    account.openstack.tenant         = openstack_info['project_name']
+    account.openstack.mgmt_network   = openstack_info['mgmt_network']
+    account.openstack.user_domain    = openstack_info['user_domain_name']
+    account.openstack.project_domain = openstack_info['project_domain_name']
     return account
 
 def get_cal_plugin():
@@ -531,6 +547,7 @@ class OpenStackTest(unittest.TestCase):
                 openstack_info['username'],
                 openstack_info['password'],
                 openstack_info['auth_url'],
+                None,
                 openstack_info['project_name'])
         # Get hold of the client instance need for Token Manager
         client = drv._get_keystone_connection()
@@ -565,6 +582,81 @@ class OpenStackTest(unittest.TestCase):
 
         flavors = nova.flavor_list()
         self.assertTrue(len(flavors) > 1)
+
+    def test_v3_Keystone(self):
+        # Keystone v3 authentication
+        auth_exp = False
+        try:
+            drv = KeystoneDriverV3(openstack_V3_info['username'],
+                    openstack_V3_info['password'],
+                    openstack_V3_info['auth_url'],
+                    openstack_V3_info['project_name'],
+                    None,
+                    openstack_V3_info['user_domain_name'],
+                    openstack_V3_info['project_domain_name'])
+            client = drv._get_keystone_connection()
+        except Exception:
+            auth_exp = True
+        self.assertFalse(auth_exp)
+
+        # Incorrect domain being to passed to v3 Keystone API
+        auth_exp = False
+        try:
+            drv = KeystoneDriverV3(openstack_V3_info['username'],
+                    openstack_V3_info['password'],
+                    openstack_V3_info['auth_url'],
+                    openstack_V3_info['project_name'],
+                    None,
+                    "DummyDom",
+                    openstack_V3_info['project_domain_name'])
+            client = drv._get_keystone_connection()
+        except Exception:
+            auth_exp = True
+        self.assertTrue(auth_exp)
+
+        # Keystone v3 authentication-Backward compatabilty test
+        auth_exp = False
+        try:
+            drv = KeystoneDriverV3(openstack_info['username'],
+                    openstack_info['password'],
+                    openstack_info['auth_url'],
+                    openstack_info['project_name'],
+                    None,
+                    openstack_info['user_domain_name'],
+                    openstack_info['project_domain_name'])
+            client = drv._get_keystone_connection()
+        except Exception:
+            auth_exp = True
+        self.assertFalse(auth_exp)
+
+        # Keystone v3 authentication-Backward compatabilty
+        auth_exp = False
+        try:
+            drv = KeystoneDriverV3(openstack_info['username'],
+                    openstack_info['password'],
+                    openstack_info['auth_url'],
+                    openstack_info['project_name'],
+                    None,
+                    None,
+                    None)
+            client = drv._get_keystone_connection()
+        except Exception:
+            auth_exp = True
+        self.assertFalse(auth_exp)
+
+        # Keystone v2 authentication
+        auth_exp = False
+        try:
+            drv2 = KeystoneDriverV2(
+                    openstack_info['username'],
+                    openstack_info['password'],
+                    'http://10.66.4.17:5000/v2.0',
+                    openstack_info['project_name'],
+                    None)
+            client = drv2._get_keystone_connection()
+        except Exception: 
+            auth_exp = True
+        self.assertFalse(auth_exp)
 
     @unittest.skip("Skipping test_vm_operations")
     def test_vm_operations(self):
