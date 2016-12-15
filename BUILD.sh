@@ -126,6 +126,17 @@ fi
 ###############################################################################
 # Main block
 
+# Disable apt-daily.service and apt-daily.timer
+
+DAILY_TIMER='apt-daily.timer'
+DAILY_SERVICE='apt-daily.service'
+if [ $(systemctl is-active $DAILY_TIMER) = "active" ]
+then
+    systemctl stop $DAILY_TIMER
+    systemctl disable $DAILY_TIMER
+    systemctl disable $DAILY_SERVICE
+fi
+
 # must be run from the top of a workspace
 cd $(dirname $0)
 
