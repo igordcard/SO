@@ -21,6 +21,7 @@ import logging
 import argparse
 import sys, os, time
 import rwlogger
+import yaml
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
@@ -90,14 +91,53 @@ def create_port_metadata(drv, argument):
         
     nvconn = drv.nova_drv._get_nova_connection()
     nvconn.servers.set_meta(argument.server_id, meta_data)
+
+def get_volume_id(server_vol_list, name):
+    if server_vol_list is None:
+        return
+
+    for os_volume in server_vol_list:
+        try:
+            " Device name is of format /dev/vda"
+            vol_name = (os_volume['device']).split('/')[2]
+        except:                   
+            continue
+        if name == vol_name:
+           return os_volume['volumeId']
     
+def create_volume_metadata(drv, argument):
+    if argument.vol_metadata is None:
+        return
+
+    yaml_vol_str = argument.vol_metadata.read()
+    yaml_vol_cfg = yaml.load(yaml_vol_str)
+
+    srv_volume_list = drv.nova_volume_list(argument.server_id)
+    for volume in yaml_vol_cfg:
+        if 'guest_params' not in volume:
+            continue
+        if 'custom_meta_data' not in volume['guest_params']:
+            continue
+        vmd = dict()
+        for vol_md_item in volume['guest_params']['custom_meta_data']:
+            if 'value' not in vol_md_item:
+               continue
+            vmd[vol_md_item['name']] = vol_md_item['value']
+
+        # Get volume id
+        vol_id = get_volume_id(srv_volume_list, volume['name'])
+        if vol_id is None:
+            logger.error("Server %s Could not find volume %s" %(argument.server_id, volume['name']))
+            sys.exit(3)
+        drv.cinder_volume_set_metadata(vol_id, vmd)
+
         
 def prepare_vm_after_boot(drv,argument):
     ### Important to call create_port_metadata before assign_floating_ip_address
     ### since assign_floating_ip_address can wait thus delaying port_metadata creation
 
     ### Wait for a max of 5 minute for server to come up -- Needs fine tuning
-    wait_time = 300
+    wait_time = 500
     sleep_time = 2
     for i in range(int(wait_time/sleep_time)):
         server = drv.nova_server_get(argument.server_id)
@@ -115,6 +155,7 @@ def prepare_vm_after_boot(drv,argument):
         sys.exit(4)
     
     #create_port_metadata(drv, argument)
+    create_volume_metadata(drv, argument)
     assign_floating_ip_address(drv, argument)
     
 
@@ -170,6 +211,8 @@ def main():
                         dest = "port_metadata",
                         default = False,
                         help = "Create Port Metadata")
+
+    parser.add_argument("--vol_metadata", type=argparse.FileType('r'))
 
     argument = parser.parse_args()
 

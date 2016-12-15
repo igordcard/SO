@@ -49,6 +49,7 @@ from gi.repository import (
 import rift.tasklets
 import rift.package.store
 import rift.package.cloud_init
+import rift.package.script
 import rift.mano.dts as mano_dts
 
 
@@ -384,7 +385,7 @@ class VirtualDeploymentUnitRecord(object):
 
     @property
     def msg(self):
-        """ VDU message """
+        """ Process VDU message from resmgr"""
         vdu_fields = ["vm_flavor",
                       "guest_epa",
                       "vswitch_epa",
@@ -420,6 +421,28 @@ class VirtualDeploymentUnitRecord(object):
                     vdurvol_data = [vduvol for vduvol in vdur_dict['volumes'] if vduvol['name'] == opvolume.name]
                     if len(vdurvol_data) == 1:
                        vdurvol_data[0]["volume_id"] = opvolume.volume_id
+                       if opvolume.has_field('custom_meta_data'):
+                           metadata_list = list()
+                           for metadata_item in opvolume.custom_meta_data:
+                               metadata_list.append(metadata_item.as_dict())
+                           if 'guest_params' not in vdurvol_data[0]:
+                               vdurvol_data[0]['guest_params'] = dict()
+                           vdurvol_data[0]['guest_params']['custom_meta_data'] = metadata_list
+
+            if self._vm_resp.has_field('custom_boot_data'):
+                vdur_dict['custom_boot_data'] = dict()
+                if self._vm_resp.custom_boot_data.has_field('custom_drive'):
+                    vdur_dict['custom_boot_data']['custom_drive'] = self._vm_resp.custom_boot_data.custom_drive
+                if self._vm_resp.custom_boot_data.has_field('custom_meta_data'):
+                    metadata_list = list()
+                    for metadata_item in self._vm_resp.custom_boot_data.custom_meta_data:
+                       metadata_list.append(metadata_item.as_dict())
+                    vdur_dict['custom_boot_data']['custom_meta_data'] = metadata_list
+                if self._vm_resp.custom_boot_data.has_field('custom_config_files'):
+                    file_list = list()
+                    for file_item in self._vm_resp.custom_boot_data.custom_config_files:
+                       file_list.append(file_item.as_dict())
+                    vdur_dict['custom_boot_data']['custom_config_files'] = file_list
 
         icp_list = []
         ii_list = []
@@ -552,12 +575,37 @@ class VirtualDeploymentUnitRecord(object):
             self._log.info("Ignoring placement group with cloud construct for cloud-type: %s", cloud_type)
         return
 
+    def process_custom_bootdata(self, vm_create_msg_dict):
+        """Process the custom boot data"""
+        if 'custom_config_files' not in vm_create_msg_dict['custom_boot_data']:
+            return
+
+        stored_package = self._vnfd_package_store.get_package(self._vnfr.vnfd_id)
+        script_extractor = rift.package.script.PackageScriptExtractor(self._log)
+        for custom_file_item in vm_create_msg_dict['custom_boot_data']['custom_config_files']:
+            if 'source' not in custom_file_item or 'dest' not in custom_file_item:
+                continue
+            source = custom_file_item['source']
+            # Find source file in scripts dir of VNFD
+            self._vnfd_package_store.refresh()
+            self._log.debug("Checking for source config file at %s", source)
+            try:
+               source_file_str = script_extractor.read_script(stored_package, source)
+            except rift.package.script.ScriptExtractionError as e:
+               raise  VirtualDeploymentUnitRecordError(e)
+            # Update source file location with file contents
+            custom_file_item['source'] = source_file_str
+
+        return
+
     def resmgr_msg(self, config=None):
         vdu_fields = ["vm_flavor",
                       "guest_epa",
                       "vswitch_epa",
                       "hypervisor_epa",
-                      "host_epa"]
+                      "host_epa",
+                      "volumes",
+                      "custom_boot_data"]
 
         self._log.debug("Creating params based on VDUD: %s", self._vdud)
         vdu_copy_dict = {k: v for k, v in self._vdud.as_dict().items() if k in vdu_fields}
@@ -614,15 +662,14 @@ class VirtualDeploymentUnitRecord(object):
         vm_create_msg_dict.update(vdu_copy_dict)
 
         self.process_placement_groups(vm_create_msg_dict)
+        if 'custom_boot_data' in vm_create_msg_dict:
+             self.process_custom_bootdata(vm_create_msg_dict) 
 
         msg = RwResourceMgrYang.VDUEventData()
         msg.event_id = self._request_id
         msg.cloud_account = self.cloud_account_name
         msg.request_info.from_dict(vm_create_msg_dict)
 
-        for volume in self._vdud.volumes:
-            v = msg.request_info.volumes.add()
-            v.from_dict(volume.as_dict())
         return msg
 
     @asyncio.coroutine
