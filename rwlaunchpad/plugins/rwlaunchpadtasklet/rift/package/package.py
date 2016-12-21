@@ -314,7 +314,14 @@ class DescriptorPackage(object):
                 continue
 
             # Copy the contents of the file to the correct path
-            dest_file_path = os.path.join(dest_root_dir, filename)
+            # Remove the common prefix and create the dest filename
+            if src_dir is not None:
+                fname = filename[len(src_dir):]
+                if fname[0] == '/':
+                    fname = fname[1:]
+            else:
+                fname = filename
+            dest_file_path = os.path.join(dest_root_dir, fname)
             dest_dir_path = os.path.dirname(dest_file_path)
             if not os.path.exists(dest_dir_path):
                 os.makedirs(dest_dir_path)
