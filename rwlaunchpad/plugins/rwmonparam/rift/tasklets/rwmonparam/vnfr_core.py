@@ -36,7 +36,7 @@ from gi.repository import (
     )
 import rift.mano.dts as mano_dts
 import rwlogger
-
+import xmltodict, json
 
 class MonitoringParamError(Exception):
     """Monitoring Parameter error"""
@@ -435,6 +435,13 @@ class MonitoringParam(object):
         if self._json_querier is None:
             self._log.warning("json querier is not created.  Cannot extract value form response.")
             return
+
+        try:
+            xml_data = xmltodict.parse(response_msg)
+            json_msg=json.dumps(xml_data)
+            response_msg = json_msg
+        except Exception as e:
+            pass
 
         try:
             value = self._json_querier.query(response_msg)
