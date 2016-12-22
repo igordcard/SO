@@ -36,6 +36,9 @@ from gi.repository import (
     RwNsdYang,
     )
 
+import rift.package.store
+import rift.package.cloud_init
+
 logger = logging.getLogger("rift2openmano.py")
 
 
@@ -175,61 +178,39 @@ def is_writable_directory(dir_path):
     return True
 
 
-def create_vnfd_from_xml_files(vnfd_file_hdls):
-    """ Create a list of RiftVNFD instances from xml file handles
+def create_vnfd_from_files(vnfd_file_hdls):
+    """ Create a list of RiftVNFD instances from xml/yaml file handles
 
     Arguments:
-        vnfd_file_hdls - Rift VNFD XML file handles
+        vnfd_file_hdls - Rift VNFD XML/YAML file handles
 
     Returns:
         A list of RiftVNFD instances
     """
     vnfd_dict = {}
     for vnfd_file_hdl in vnfd_file_hdls:
-        vnfd = RiftVNFD.from_xml_file_hdl(vnfd_file_hdl)
-        vnfd_dict[vnfd.id] = vnfd
-
-    return vnfd_dict
-
-def create_vnfd_from_yaml_files(vnfd_file_hdls):
-    """ Create a list of RiftVNFD instances from xml file handles
-
-    Arguments:
-        vnfd_file_hdls - Rift VNFD YAML file handles
-
-    Returns:
-        A list of RiftVNFD instances
-    """
-    vnfd_dict = {}
-    for vnfd_file_hdl in vnfd_file_hdls:
-        vnfd = RiftVNFD.from_yaml_file_hdl(vnfd_file_hdl)
+        if vnfd_file_hdl.name.endswith("yaml") or vnfd_file_hdl.name.endswith("yaml"):
+            vnfd = RiftVNFD.from_yaml_file_hdl(vnfd_file_hdl)
+        else:
+            vnfd = RiftVNFD.from_xml_file_hdl(vnfd_file_hdl)
         vnfd_dict[vnfd.id] = vnfd
 
     return vnfd_dict
 
 
-def create_nsd_from_xml_file(nsd_file_hdl):
-    """ Create a list of RiftNSD instances from xml file handles
+def create_nsd_from_file(nsd_file_hdl):
+    """ Create a list of RiftNSD instances from yaml/xml file handles
 
     Arguments:
-        nsd_file_hdls - Rift NSD XML file handles
+        nsd_file_hdls - Rift NSD XML/yaml file handles
 
     Returns:
         A list of RiftNSD instances
     """
-    nsd = RiftNSD.from_xml_file_hdl(nsd_file_hdl)
-    return nsd
-
-def create_nsd_from_yaml_file(nsd_file_hdl):
-    """ Create a list of RiftNSD instances from yaml file handles
-
-    Arguments:
-        nsd_file_hdls - Rift NSD XML file handles
-
-    Returns:
-        A list of RiftNSD instances
-    """
-    nsd = RiftNSD.from_yaml_file_hdl(nsd_file_hdl)
+    if nsd_file_hdl.name.endswith("yaml") or nsd_file_hdl.name.endswith("yaml"):
+        nsd = RiftNSD.from_yaml_file_hdl(nsd_file_hdl)
+    else:
+        nsd = RiftNSD.from_xml_file_hdl(nsd_file_hdl)
     return nsd
 
 
@@ -240,7 +221,7 @@ def convert_vnfd_name(vnfd_name, member_idx):
     return vnfd_name + "__" + str(member_idx)
 
 
-def rift2openmano_nsd(rift_nsd, rift_vnfds,openmano_vnfd_ids):
+def rift2openmano_nsd(rift_nsd, rift_vnfds, openmano_vnfd_ids):
     for vnfd_id in rift_nsd.vnfd_ids:
         if vnfd_id not in rift_vnfds:
             raise VNFNotFoundError("VNF id %s not provided" % vnfd_id)
@@ -332,6 +313,46 @@ def rift2openmano_nsd(rift_nsd, rift_vnfds,openmano_vnfd_ids):
 
     return openmano
 
+def cloud_init(rift_vnfd_id, vdu):
+    """ Populate cloud_init with cloud-config script from
+         either the inline contents or from the file provided
+    """
+    vnfd_package_store = rift.package.store.VnfdPackageFilesystemStore(logger)
+
+    cloud_init_msg = None
+    if vdu.cloud_init is not None:
+        logger.debug("cloud_init script provided inline %s", vdu.cloud_init)
+        cloud_init_msg = vdu.cloud_init
+    elif vdu.cloud_init_file is not None:
+	# Get cloud-init script contents from the file provided in the cloud_init_file param
+        logger.debug("cloud_init script provided in file %s", vdu.cloud_init_file)
+        filename = vdu.cloud_init_file
+        vnfd_package_store.refresh()
+        stored_package = vnfd_package_store.get_package(rift_vnfd_id)
+        cloud_init_extractor = rift.package.cloud_init.PackageCloudInitExtractor(logger)
+        try:
+            cloud_init_msg = cloud_init_extractor.read_script(stored_package, filename)
+        except rift.package.cloud_init.CloudInitExtractionError as e:
+            raise ValueError(e)
+    else:
+        logger.debug("VDU translation: cloud-init script not provided")
+        return
+
+    logger.debug("Current cloud init msg is {}".format(cloud_init_msg))
+    if cloud_init_msg:
+        try:
+            cloud_init_dict = yaml.load(cloud_init_msg)
+        except Exception as e:
+            logger.exception(e)
+            logger.error("Error loading cloud init Yaml file with exception %s", str(e))
+            return cloud_init_msg
+
+    logger.debug("Current cloud init dict is {}".format(cloud_init_dict))
+
+    cloud_msg = yaml.safe_dump(cloud_init_dict,width=1000,default_flow_style=False)
+    cloud_init = "#cloud-config\n"+cloud_msg
+    logger.debug("Cloud init msg is {}".format(cloud_init))
+    return cloud_init
 
 def rift2openmano_vnfd(rift_vnfd, rift_nsd):
     openmano_vnf = {"vnf":{}}
@@ -437,12 +458,14 @@ def rift2openmano_vnfd(rift_vnfd, rift_nsd):
         if vdu.vm_flavor.has_field("storage_gb") and vdu.vm_flavor.storage_gb:
             vnfc["disk"] = vdu.vm_flavor.storage_gb
 
-        if os.path.isabs(vdu.image):
-            vnfc["VNFC image"] = vdu.image
-        else:
-            vnfc["image name"] = vdu.image
-            if vdu.has_field("image_checksum"):
-                vnfc["image checksum"] = vdu.image_checksum
+        if vdu.has_field("image"):
+            if os.path.isabs(vdu.image):
+                vnfc["VNFC image"] = vdu.image
+            else:
+                vnfc["image name"] = vdu.image
+                if vdu.has_field("image_checksum"):
+                    vnfc["image checksum"] = vdu.image_checksum
+
         dedicated_int = False
         for intf in list(vdu.internal_interface) + list(vdu.external_interface):
             if intf.virtual_interface.type_yang in ["SR_IOV", "PCI_PASSTHROUGH"]:
@@ -496,6 +519,49 @@ def rift2openmano_vnfd(rift_vnfd, rift_nsd):
                 for feature in vdu.host_epa.om_cpu_feature:
                     vnfc["processor"]["features"].append(feature.feature)
 
+        if vdu.has_field("volumes"):
+            vnfc["devices"] = []
+            # Sort volumes as device-list is implictly ordered by Openmano
+            newvollist = sorted(vdu.volumes, key=lambda k: k.name) 
+            for iter_num, volume in enumerate(newvollist):
+                if iter_num == 0:
+                    # Convert the first volume to vnfc.image
+                    if os.path.isabs(volume.image):
+                        vnfc["VNFC image"] = volume.image
+                    else:
+                        vnfc["image name"] = volume.image
+                        if volume.has_field("image_checksum"):
+                            vnfc["image checksum"] = volume.image_checksum
+                else:
+                    # Add Openmano devices
+                    device = {}
+                    device["type"] = volume.guest_params.device_type
+                    device["image"] = volume.image
+                    vnfc["devices"].append(device)   
+
+        vnfc_cloud_config_init = False
+        if vdu.has_field("cloud_init") or vdu.has_field("cloud_init_file"):
+            vnfc['cloud-config'] = dict()
+            vnfc_cloud_config_init = True
+            vnfc['cloud-config']['user-data'] = cloud_init(rift_vnfd.id, vdu)
+
+        if vdu.has_field("custom_boot_data"):
+            if vdu.custom_boot_data.has_field('custom_drive'):
+                if vdu.custom_boot_data.custom_drive is True:
+                    if vnfc_cloud_config_init is False:
+                        vnfc['cloud-config'] = dict()
+                        vnfc_cloud_config_init = True
+                    vnfc['cloud-config']['config-drive'] = vdu.custom_boot_data.custom_drive
+            if vdu.custom_boot_data.has_field('custom_meta_data'):
+                if vnfc_cloud_config_init is False:
+                    vnfc['cloud-config'] = dict()
+                    vnfc_cloud_config_init = True
+                vnfc['cloud-config']['meta-data'] = list()
+                for metaitem in vdu.custom_boot_data.custom_meta_data:
+                    openmano_metaitem = dict()
+                    openmano_metaitem['key'] = metaitem.name
+                    openmano_metaitem['value'] = metaitem.value
+                    vnfc['cloud-config']['meta-data'].append(openmano_metaitem)
 
         vnf["VNFC"].append(vnfc)
 
@@ -558,14 +624,14 @@ def parse_args(argv=sys.argv[1:]):
 
     parser.add_argument(
         '-n', '--nsd-file-hdl',
-        metavar="nsd_xml_file",
+        metavar="nsd_file",
         type=argparse.FileType('r'),
         help="Rift NSD Descriptor File",
         )
 
     parser.add_argument(
         '-v', '--vnfd-file-hdls',
-        metavar="vnfd_xml_file",
+        metavar="vnfd_file",
         action='append',
         type=argparse.FileType('r'),
         help="Rift VNFD Descriptor File",
@@ -605,18 +671,23 @@ def main(argv=sys.argv[1:]):
     args = parse_args(argv)
 
     nsd = None
+    openmano_vnfr_ids = dict()
+    vnf_dict = None
     if args.vnfd_file_hdls is not None:
-        vnf_dict = create_vnfd_from_xml_files(args.vnfd_file_hdls)
+        vnf_dict = create_vnfd_from_files(args.vnfd_file_hdls)
+
+    for vnfd in vnf_dict:
+        openmano_vnfr_ids[vnfd] = vnfd
 
     if args.nsd_file_hdl is not None:
-        nsd = create_nsd_from_xml_file(args.nsd_file_hdl)
+        nsd = create_nsd_from_file(args.nsd_file_hdl)
 
-    openmano_nsd = rift2openmano_nsd(nsd, vnf_dict)
+    openmano_nsd = rift2openmano_nsd(nsd, vnf_dict, openmano_vnfr_ids)
 
     write_yaml_to_file(openmano_nsd["name"], args.outdir, openmano_nsd)
 
     for vnf in vnf_dict.values():
-        openmano_vnf = rift2openmano_vnfd(vnf)
+        openmano_vnf = rift2openmano_vnfd(vnf, nsd)
         write_yaml_to_file(openmano_vnf["vnf"]["name"], args.outdir, openmano_vnf)
 
 
