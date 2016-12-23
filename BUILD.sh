@@ -155,7 +155,7 @@ if [[ $PLATFORM == ub16 ]]; then
         
     # and install the tools
     sudo apt remove -y rw.toolchain-rwbase tcpdump
-    sudo apt-get install -y rw.tools-container-tools rw.tools-scripts python 
+    sudo apt-get install -y rw.tools-container-tools=${PLATFORM_VERSION} rw.tools-scripts=${PLATFORM_VERSION} python 
 elif [[ $PLATFORM == fc20 ]]; then
     # get the container tools from the correct repository
     sudo rm -f /etc/yum.repos.d/private.repo
