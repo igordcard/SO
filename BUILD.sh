@@ -147,6 +147,9 @@ test -h /usr/rift && sudo rm -f /usr/rift
 if [[ $PLATFORM == ub16 ]]; then
     # enable the right repos
     curl http://repos.riftio.com/public/xenial-riftware-public-key | sudo apt-key add -
+    # the old mkcontainer always enabled release which can be bad
+    # so remove it
+    sudo rm -f /etc/apt/sources.list.d/release
     sudo curl -o /etc/apt/sources.list.d/${PLATFORM_REPOSITORY}.list http://buildtracker.riftio.com/repo_file/ub16/${PLATFORM_REPOSITORY}/ 
     sudo apt-get update
         
