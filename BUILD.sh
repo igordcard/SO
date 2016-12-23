@@ -171,6 +171,7 @@ fi
 if $runMkcontainer; then
     sudo apt-get install -y libxml2-dev libxslt-dev
     sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
+    sudo pip3 install -y lxml==3.4.0
 fi
 
 
