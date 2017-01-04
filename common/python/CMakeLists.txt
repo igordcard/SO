@@ -32,6 +32,7 @@ rift_python_install_tree(
   )
 
 
+# Subscribers
 rift_python_install_tree(
   FILES
     rift/mano/dts/__init__.py
@@ -46,23 +47,29 @@ rift_python_install_tree(
   PYTHON3_ONLY
   )
 
+# RPCs
 rift_python_install_tree(
   FILES
-    rift/mano/config_data/__init__.py
-    rift/mano/config_data/config.py
+    rift/mano/dts/rpc/__init__.py
+    rift/mano/dts/rpc/core.py
+  COMPONENT ${PKG_LONG_NAME}
+  PYTHON3_ONLY
+  )
+
+# Downloaders
+rift_python_install_tree(
+  FILES
+    rift/downloader/__init__.py
+    rift/downloader/base.py
+    rift/downloader/url.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )
 
 rift_python_install_tree(
   FILES
-    rift/mano/dts/__init__.py
-    rift/mano/dts/core.py
-    rift/mano/dts/subscriber/__init__.py
-    rift/mano/dts/subscriber/core.py
-    rift/mano/dts/subscriber/store.py
-    rift/mano/dts/subscriber/ns_subscriber.py
-    rift/mano/dts/subscriber/vnf_subscriber.py
+    rift/mano/config_data/__init__.py
+    rift/mano/config_data/config.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )

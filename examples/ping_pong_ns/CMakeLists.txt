@@ -68,6 +68,7 @@ rift_python_install_tree(
   FILES
     rift/mano/examples/ping_pong_nsd.py
     rift/mano/examples/start_traffic.py
+    rift/mano/examples/ping_set_rate.py
   )
 
 install(

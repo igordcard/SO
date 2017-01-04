@@ -46,6 +46,13 @@ module mano-types
       enum JSON;
     }
   }
+  typedef package-type {
+      description "Type of descriptor being on-boarded";
+      type enumeration {
+        enum NSD;
+        enum VNFD;
+      }
+    }
 
   typedef parameter-data-type {
     type enumeration {
@@ -139,6 +146,37 @@ module mano-types
             ";
       type string;
     } 
+  }
+  grouping initial-config {
+    leaf seq {
+      description
+          "Sequence number for the configuration primitive.";
+      type uint64;
+    }
+
+    leaf name {
+      description
+          "Name of the configuration primitive.";
+      type string;
+      mandatory "true";
+    }
+
+    leaf user-defined-script {
+      description
+          "A user defined script.";
+      type string;
+    }
+
+    list parameter {
+      key "name";
+      leaf name {
+        type string;
+      }
+
+      leaf value {
+        type string;
+      }
+    }
   }
 
   grouping vnf-configuration {
@@ -289,30 +327,9 @@ module mano-types
       list initial-config-primitive {
         rwpb:msg-new InitialConfigPrimitive;
         description
-            "Initial set of configuration primitives.";
+          "Initial set of configuration primitives.";
         key "seq";
-        leaf seq {
-          description
-              "Sequence number for the configuration primitive.";
-          type uint64;
-        }
-
-        leaf name {
-          description 
-              "Name of the configuration primitive.";
-          type string;
-        }
-
-        list parameter {
-          key "name";
-          leaf name {
-            type string;
-          }
-
-          leaf value {
-            type string;
-          }
-        }
+        uses initial-config;
       }
 
       leaf config-template {

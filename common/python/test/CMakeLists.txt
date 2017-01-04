@@ -7,3 +7,12 @@ rift_py3test(utest_juju_api
   TEST_ARGS
   ${CMAKE_CURRENT_SOURCE_DIR}/utest_juju_api.py
   )
+
+
+##
+# utest_url_downloader
+##
+rift_py3test(utest_url_downloader.py
+  TEST_ARGS
+  ${CMAKE_CURRENT_SOURCE_DIR}/utest_url_downloader.py
+  )
