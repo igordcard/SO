@@ -988,13 +988,14 @@ class VlRecordState(enum.Enum):
 
 class InternalVirtualLinkRecord(object):
     """ Internal Virtual Link record """
-    def __init__(self, dts, log, loop, ivld_msg, vnfr_name, cloud_account_name):
+    def __init__(self, dts, log, loop, ivld_msg, vnfr_name, cloud_account_name, ip_profile=None):
         self._dts = dts
         self._log = log
         self._loop = loop
         self._ivld_msg = ivld_msg
         self._vnfr_name = vnfr_name
         self._cloud_account_name = cloud_account_name
+        self._ip_profile = ip_profile
 
         self._vlr_req = self.create_vlr()
         self._vlr = None
@@ -1008,7 +1009,10 @@ class InternalVirtualLinkRecord(object):
     @property
     def name(self):
         """ Name of this VL """
-        return self._vnfr_name + "." + self._ivld_msg.name
+        if self._ivld_msg.vim_network_name:
+            return self._ivld_msg.vim_network_name
+        else:
+            return self._vnfr_name + "." + self._ivld_msg.name
 
     @property
     def network_id(self):
@@ -1027,6 +1031,7 @@ class InternalVirtualLinkRecord(object):
                       "description",
                       "version",
                       "type_yang",
+                      "vim_network_name",
                       "provider_network"]
 
         vld_copy_dict = {k: v for k, v in self._ivld_msg.as_dict().items() if k in vld_fields}
@@ -1035,6 +1040,10 @@ class InternalVirtualLinkRecord(object):
                     "name": self.name,
                     "cloud_account": self._cloud_account_name,
                     }
+
+        if self._ip_profile and self._ip_profile.has_field('ip_profile_params'):
+            vlr_dict['ip_profile_params' ] = self._ip_profile.ip_profile_params.as_dict()
+
         vlr_dict.update(vld_copy_dict)
 
         vlr = RwVlrYang.YangData_Vlr_VlrCatalog_Vlr.from_dict(vlr_dict)
@@ -1418,6 +1427,13 @@ class VirtualNetworkFunctionRecord(object):
         self._log.debug("Published VNFR path = [%s], record = [%s]",
                         self.xpath, self.msg)
 
+    def resolve_vld_ip_profile(self, vnfd_msg, vld):
+        self._log.debug("Receieved ip profile ref is %s",vld.ip_profile_ref)
+        if not vld.has_field('ip_profile_ref'):
+            return None
+        profile = [profile for profile in vnfd_msg.ip_profiles if profile.name == vld.ip_profile_ref]
+        return profile[0] if profile else None
+
     @asyncio.coroutine
     def create_vls(self):
         """ Publish The VLs associated with this VNF """
@@ -1433,7 +1449,8 @@ class VirtualNetworkFunctionRecord(object):
                                             loop=self._loop,
                                             ivld_msg=ivld_msg,
                                             vnfr_name=self.name,
-                                            cloud_account_name=self.cloud_account_name
+                                            cloud_account_name=self.cloud_account_name,
+                                            ip_profile=self.resolve_vld_ip_profile(self.vnfd, ivld_msg)
                                             )
             self._vlrs.append(vlr)
 
