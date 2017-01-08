@@ -535,7 +535,7 @@ def rift2openmano_vnfd(rift_vnfd, rift_nsd):
                 else:
                     # Add Openmano devices
                     device = {}
-                    device["type"] = volume.guest_params.device_type
+                    device["type"] = volume.device_type
                     device["image"] = volume.image
                     vnfc["devices"].append(device)   
 
@@ -545,19 +545,19 @@ def rift2openmano_vnfd(rift_vnfd, rift_nsd):
             vnfc_cloud_config_init = True
             vnfc['cloud-config']['user-data'] = cloud_init(rift_vnfd.id, vdu)
 
-        if vdu.has_field("custom_boot_data"):
-            if vdu.custom_boot_data.has_field('custom_drive'):
-                if vdu.custom_boot_data.custom_drive is True:
+        if vdu.has_field("supplemental_boot_data"):
+            if vdu.supplemental_boot_data.has_field('boot_data_drive'):
+                if vdu.supplemental_boot_data.boot_data_drive is True:
                     if vnfc_cloud_config_init is False:
                         vnfc['cloud-config'] = dict()
                         vnfc_cloud_config_init = True
-                    vnfc['cloud-config']['config-drive'] = vdu.custom_boot_data.custom_drive
-            if vdu.custom_boot_data.has_field('custom_meta_data'):
+                    vnfc['cloud-config']['config-drive'] = vdu.supplemental_boot_data.boot_data_drive
+            if vdu.supplemental_boot_data.has_field('custom_meta_data'):
                 if vnfc_cloud_config_init is False:
                     vnfc['cloud-config'] = dict()
                     vnfc_cloud_config_init = True
                 vnfc['cloud-config']['meta-data'] = list()
-                for metaitem in vdu.custom_boot_data.custom_meta_data:
+                for metaitem in vdu.supplemental_boot_data.custom_meta_data:
                     openmano_metaitem = dict()
                     openmano_metaitem['key'] = metaitem.name
                     openmano_metaitem['value'] = metaitem.value

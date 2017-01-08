@@ -364,7 +364,7 @@ module vnfd
           }
         }
 
-        uses manotypes:custom-boot-data;
+        uses manotypes:supplemental-boot-data;
 
         list internal-connection-point {
           key "id";
