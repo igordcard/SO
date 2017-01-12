@@ -1501,10 +1501,8 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
             raise NotImplementedError("Port Type: %s not supported" %(c_point.type_yang))
 
         # By default port gets created with post_security enaled as True
-        if c_point.port_security_enabled is not None and c_point.port_security_enabled == False:
-            kwargs['port_security_enabled'] = False
-        else:
-            kwargs['port_security_enabled'] = True
+        if 'port_security_enabled' in c_point:
+            kwargs['port_security_enabled'] = c_point.port_security_enabled
 
         with self._use_driver(account) as drv:
             if c_point.has_field('security_group'):
