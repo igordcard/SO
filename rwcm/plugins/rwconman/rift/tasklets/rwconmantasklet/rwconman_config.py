@@ -831,10 +831,10 @@ class ConfigManagerConfig(object):
 
         vnfr_name = vnfr.name
 
-        vnfd = yield from self.cmdts_obj.get_vnfd(vnfr.vnfd_ref)
+        vnfd = yield from self.cmdts_obj.get_vnfd(vnfr.vnfd.id)
         if vnfd is None:
             msg = "VNFR {}, unable to get VNFD {}". \
-                  format(vnfr_name, vnfr.vnfd_ref)
+                  format(vnfr_name, vnfr.vnfd.id)
             self._log.error(msg)
             raise InitialConfigError(msg)
 
