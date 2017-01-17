@@ -509,7 +509,7 @@ class ConfigManagerConfig(object):
 
                 # Parse NSR
                 if nsr is not None:
-                    nsr_obj.set_nsr_name(nsr['nsd_name_ref'])
+                    nsr_obj.set_nsr_name(nsr['name_ref'])
                     nsr_dir = os.path.join(self._parent.cfg_dir, nsr_obj.nsr_name)
                     self._log.info("Checking NS config directory: %s", nsr_dir)
                     if not os.path.isdir(nsr_dir):
@@ -719,12 +719,14 @@ class ConfigManagerConfig(object):
                         )
 
                 v['vdur'] = []
-                vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'])
-                        for vdu in vnfr['vdur']]
-
-                for data in vdu_data:
-                    data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id'] , data))
-                    v['vdur'].append(data)
+                vdu_data = []
+                for vdu in vnfr['vdur']:
+                    d = {}
+                    for k in ['name','management_ip', 'vm_management_ip', 'id']:
+                        if k in vdu:
+                            d[k] = vdu[k]
+                    vdu_data.append(d)
+                v['vdur'].append(vdu_data)
 
                 inp['vnfr'][vnfr['member_vnf_index_ref']] = v
 
@@ -831,13 +833,7 @@ class ConfigManagerConfig(object):
 
         vnfr_name = vnfr.name
 
-        vnfd = yield from self.cmdts_obj.get_vnfd(vnfr.vnfd.id)
-        if vnfd is None:
-            msg = "VNFR {}, unable to get VNFD {}". \
-                  format(vnfr_name, vnfr.vnfd.id)
-            self._log.error(msg)
-            raise InitialConfigError(msg)
-
+        vnfd = vnfr.vnfd
         vnf_cfg = vnfd.vnf_configuration
 
         for conf in vnf_cfg.initial_config_primitive:
