@@ -1268,7 +1268,6 @@ module rwcal
         rwpb:field-string-max 64;
         type string;
       }
-      uses manotypes:custom-meta-data;
     } 
   }
 
