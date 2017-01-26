@@ -902,6 +902,7 @@ class OpenmanoNsPlugin(rwnsmplugin.NsmPluginBase):
         openmano_nsr = self._openmano_nsrs[nsr.id]
         if openmano_nsr._state == OpenmanoNSRecordState.RUNNING:
             yield from openmano_nsr.create_vlr(vlr)
+            yield from self._publisher.publish_vlr(None, vlr.vlr_msg)
         else: 
             yield from openmano_nsr.add_vlr(vlr)
 
