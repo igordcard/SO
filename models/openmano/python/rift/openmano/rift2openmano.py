@@ -417,7 +417,7 @@ def rift2openmano_vnfd(rift_vnfd, rift_nsd):
         connection = {
             "name": vld.name,
             "description": vld.description,
-            "type": "data",
+            "type": "bridge",
             "elements": [],
             }
 
