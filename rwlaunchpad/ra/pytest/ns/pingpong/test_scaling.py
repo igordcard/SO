@@ -50,7 +50,7 @@ class TestSetupPingpongNsd(object):
             rift.auto.descriptor.onboard(mgmt_session.host, descriptor)
 
     def test_install_sar(self, mgmt_session):
-        install_cmd = 'ssh {mgmt_ip} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sudo yum install sysstat --assumeyes'.format(
+        install_cmd = 'ssh {mgmt_ip} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sudo -HE yum install sysstat --assumeyes'.format(
                 mgmt_ip=mgmt_session.host,
         )
         subprocess.check_call(install_cmd, shell=True)
